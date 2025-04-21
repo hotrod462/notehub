@@ -212,3 +212,76 @@ export async function getRepoTree(token: string, owner: string, repo: string, tr
 }
 
 // Add other functions as needed (commits history, get file at commit, etc.) 
+
+/**
+ * Fetches the commit history for a specific file path.
+ * Requires the user's decrypted GitHub access token.
+ */
+export async function getCommitHistoryForFile(token: string, owner: string, repo: string, path: string): Promise<any[]> { // Replace any[] with a specific type later
+  if (!token || !owner || !repo || !path) {
+    throw new Error("Missing required parameters for getCommitHistoryForFile.");
+  }
+  const octokit = new Octokit({ auth: token });
+
+  try {
+    // Fetch commits, filtering by the file path
+    const { data: commits } = await octokit.rest.repos.listCommits({
+      owner,
+      repo,
+      path,
+      // You might want to add pagination parameters like per_page and page if needed
+      // per_page: 30, 
+    });
+    console.log(`Fetched ${commits.length} commits for path: ${owner}/${repo}/${path}`);
+    // Return relevant data (e.g., sha, commit message, author, date)
+    // Map to a cleaner structure if desired
+    return commits.map(c => ({
+        sha: c.sha,
+        message: c.commit.message,
+        author: c.commit.author?.name,
+        date: c.commit.author?.date,
+    }));
+  } catch (error: any) {
+    console.error(`Error fetching commit history for ${owner}/${repo}/${path}:`, error);
+    // Handle 404 for path not found? The API might just return empty list.
+    throw new Error(`Could not fetch commit history from GitHub.`);
+  }
+}
+
+/**
+ * Fetches the content of a specific file at a given commit SHA.
+ * Requires the user's decrypted GitHub access token.
+ */
+export async function getFileContentAtCommit(token: string, owner: string, repo: string, path: string, commitSha: string): Promise<string | null> {
+  if (!token || !owner || !repo || !path || !commitSha) {
+    throw new Error("Missing required parameters for getFileContentAtCommit.");
+  }
+  const octokit = new Octokit({ auth: token });
+
+  try {
+    const { data } = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path,
+      ref: commitSha, // Specify the commit SHA
+    });
+
+    // Check if the response is for a file and has content
+    if (!Array.isArray(data) && data.type === 'file' && typeof data.content === 'string') {
+      // Content is base64 encoded, decode it
+      const decodedContent = Buffer.from(data.content, 'base64').toString('utf8');
+      return decodedContent;
+    } else {
+      console.warn(`Path ${path} at commit ${commitSha} in ${owner}/${repo} did not resolve to a file with content. Type: ${Array.isArray(data) ? 'directory' : data.type}`);
+      return null; // Path is a directory or unexpected format at this commit
+    }
+
+  } catch (error: any) {
+    if (error.status === 404) {
+      console.log(`File not found at commit ${commitSha}: ${owner}/${repo}/${path}`);
+      return null; // File didn't exist at this commit
+    }
+    console.error(`Error getting content for ${owner}/${repo}/${path} at commit ${commitSha}:`, error);
+    throw new Error(`Could not get file content at commit from GitHub.`); // Re-throw other errors
+  }
+} 

@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { decrypt } from '@/lib/encryption.server';
-import { getGithubUser, commitFile, getRepoFileContent, getRepoTree, checkRepoExists, createGithubRepo } from '@/lib/githubService.server'; // Added checkRepoExists, createGithubRepo
+import { getGithubUser, commitFile, getRepoFileContent, getRepoTree, checkRepoExists, createGithubRepo, getCommitHistoryForFile, getFileContentAtCommit } from '@/lib/githubService.server'; // Added history functions
 // Import types if necessary (e.g., for Supabase data)
 
 interface SaveNoteResult {
@@ -41,6 +41,29 @@ interface EnsureRepoResult {
     error?: string;
     created?: boolean; // Flag to indicate if repo was newly created
 }
+
+// --- Interfaces for History Actions ---
+// Export CommitInfo interface
+export interface CommitInfo { 
+    sha: string;
+    message?: string;
+    author?: string;
+    date?: string;
+}
+
+interface GetHistoryResult {
+    success: boolean;
+    history?: CommitInfo[];
+    error?: string;
+}
+
+interface GetVersionResult {
+    success: boolean;
+    content?: string | null; // Content can be string or null if not found at that commit
+    error?: string;
+}
+
+// --- End of History Actions ---
 
 export async function saveNote(notePath: string, content: string): Promise<SaveNoteResult> {
     if (!notePath) {
@@ -333,4 +356,126 @@ export async function getNoteTree(): Promise<GetTreeResult> {
         }
         return { success: false, error: error.message || 'Failed to fetch repository tree.' };
     }
-} 
+}
+
+// --- History Server Actions ---
+
+export async function getNoteHistory(notePath: string): Promise<GetHistoryResult> {
+    if (!notePath) {
+        return { success: false, error: 'Note path is required.' };
+    }
+
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { cookies: { get: (name) => cookieStore.get(name)?.value } }
+    );
+
+    // 1. Get User & Profile
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+        return { success: false, error: 'User not authenticated.' };
+    }
+
+    const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('github_repo_name, github_token_encrypted')
+        .eq('id', user.id)
+        .single();
+
+    if (profileError || !profile) { return { success: false, error: 'Could not fetch user profile.' }; }
+    if (!profile.github_repo_name) { return { success: false, error: 'GitHub repository name not set.' }; }
+    if (!profile.github_token_encrypted) { return { success: false, error: 'Encrypted GitHub token not found.' }; }
+
+    // 2. Decrypt Token
+    const decryptedToken = decrypt(profile.github_token_encrypted);
+    if (!decryptedToken) { return { success: false, error: 'Failed to decrypt GitHub token.' }; }
+
+    try {
+        // 3. Get GitHub Username & Repo
+        const githubUser = await getGithubUser(decryptedToken);
+        const owner = githubUser.login;
+        const repo = profile.github_repo_name;
+
+        // 4. Call GitHub Service to Get History
+        const historyData = await getCommitHistoryForFile(
+            decryptedToken,
+            owner,
+            repo,
+            notePath
+        );
+
+        console.log(`Successfully fetched history for ${owner}/${repo}/${notePath}`);
+        return { success: true, history: historyData };
+
+    } catch (error: any) {
+        console.error(`Error fetching history for ${profile.github_repo_name}/${notePath}:`, error);
+        // Consider more specific error handling (e.g., distinguishing 404?)
+        return { success: false, error: error.message || 'Failed to fetch note history.' };
+    }
+}
+
+export async function getNoteVersion(notePath: string, commitSha: string): Promise<GetVersionResult> {
+    if (!notePath || !commitSha) {
+        return { success: false, error: 'Note path and commit SHA are required.' };
+    }
+
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { cookies: { get: (name) => cookieStore.get(name)?.value } }
+    );
+
+    // 1. Get User & Profile (Copied from getNoteHistory - consider abstracting)
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+        return { success: false, error: 'User not authenticated.' };
+    }
+
+    const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('github_repo_name, github_token_encrypted')
+        .eq('id', user.id)
+        .single();
+
+    if (profileError || !profile) { return { success: false, error: 'Could not fetch user profile.' }; }
+    if (!profile.github_repo_name) { return { success: false, error: 'GitHub repository name not set.' }; }
+    if (!profile.github_token_encrypted) { return { success: false, error: 'Encrypted GitHub token not found.' }; }
+
+    // 2. Decrypt Token
+    const decryptedToken = decrypt(profile.github_token_encrypted);
+    if (!decryptedToken) { return { success: false, error: 'Failed to decrypt GitHub token.' }; }
+
+    try {
+        // 3. Get GitHub Username & Repo
+        const githubUser = await getGithubUser(decryptedToken);
+        const owner = githubUser.login;
+        const repo = profile.github_repo_name;
+
+        // 4. Call GitHub Service to Get File Content at Commit
+        const fileContent = await getFileContentAtCommit(
+            decryptedToken,
+            owner,
+            repo,
+            notePath,
+            commitSha
+        );
+
+        if (fileContent === null) {
+            console.log(`Note not found at commit ${commitSha}: ${owner}/${repo}/${notePath}`);
+            // Return success, but indicate content is null (didn't exist or was dir)
+            return { success: true, content: null };
+        } else {
+            console.log(`Successfully loaded content for ${owner}/${repo}/${notePath} at ${commitSha}`);
+            return { success: true, content: fileContent };
+        }
+
+    } catch (error: any) {
+        console.error(`Error loading note version ${commitSha} for ${profile.github_repo_name}/${notePath}:`, error);
+        return { success: false, error: error.message || 'Failed to load note version.' };
+    }
+}
+
+// --- End of History Actions --- 
