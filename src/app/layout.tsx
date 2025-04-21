@@ -6,7 +6,8 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { signInWithGithub, signOut } from "@/app/auth/actions";
 import { Toaster } from "@/components/ui/sonner";
-import { FileTreeSidebar } from "@/components/FileTreeSidebar";
+// import { FileTreeSidebar } from "@/components/FileTreeSidebar";
+// import { ThemeToggle } from "@/components/ThemeToggle";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -73,9 +74,7 @@ async function AppHeader() {
               </form>
             </>
           ) : (
-            <form action={signInWithGithub}>
-              <Button variant="outline" size="sm">Login with GitHub</Button>
-            </form>
+            null
           )}
         </div>
       </div>
@@ -93,14 +92,10 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased flex flex-col min-h-screen`}
       >
-        {/* @ts-expect-error Server Component */}
         <AppHeader />
-        <div className="flex flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <FileTreeSidebar />
-          <main className="flex-1 pl-4">
-            {children}
-          </main>
-        </div>
+        <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {children}
+        </main>
         <Toaster />
       </body>
     </html>

@@ -57,7 +57,23 @@ export async function middleware(request: NextRequest) {
   );
 
   // Refresh session if expired - important!
-  await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // If the user is not logged in and tries to access /notes/*, redirect to signin
+  if (!user && request.nextUrl.pathname.startsWith('/notes')) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/auth/signin'
+    return NextResponse.redirect(url)
+  }
+
+  // If the user is logged in and tries to access the landing page or signin page, redirect to /notes
+  if (user && (request.nextUrl.pathname === '/' || request.nextUrl.pathname === '/auth/signin')) {
+      // TODO: Ideally redirect to the last visited note or a default one.
+      // For now, just redirecting to /notes which will show the file tree.
+      const url = request.nextUrl.clone()
+      url.pathname = '/notes'
+      return NextResponse.redirect(url)
+  }
 
   return response;
 }
@@ -72,6 +88,7 @@ export const config = {
      * - favicon.ico (favicon file)
      * Feel free to modify this pattern to match more paths.
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Add auth/callback to the excluded paths
+    '/((?!_next/static|_next/image|favicon.ico|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }; 
