@@ -66,22 +66,20 @@ This document outlines the step-by-step plan for building NoteHub, an online not
 
 ---
 
-## Step 4: Storing GitHub Token & Initial User Sync
+## Step 4: Storing GitHub Token & Initial User Sync (Callback Method)
 
-1. **Modify `users` Table (if needed):** Ensure `github_token_encrypted` column exists.
-2. **Update RLS Policies:**
-    - Allow users to select/update their own record in `public.users` based on `auth.uid() = id`.
-    - Ensure service role can perform necessary operations.
-3. **Create Supabase Edge Function or Trigger:**
-    - **Option A (Trigger):** On insert into `auth.users` (specifically for GitHub provider), trigger a function to:
-        - Get the `provider_token` (GitHub access token) from the `auth.identities` table (requires querying as service role).
-        - Encrypt the token using `pgsodium`.
-        - Upsert the user info (email, name, avatar, encrypted token) into `public.users`, linking via `auth.users.id`.
-    - **Option B (Edge Function called from Callback):** Modify the `/auth/callback` route to securely call an Edge Function after successful sign-in. The Edge Function (running with service role) fetches the provider token, encrypts it, and upserts to `public.users`.
-4. **Create encryption utility** (`src/lib/encryption.server.ts`) using Node.js `crypto` if encryption/decryption is needed outside Supabase (e.g., in server actions before calling GitHub API). Ensure `ENCRYPTION_KEY` is in `.env.local`. *Alternatively, leverage Supabase's `pgsodium` for encryption/decryption directly within SQL/triggers.*
+1. **Modify `users` Table:** Done in previous step (linking `id` to `auth.users.id`, ensuring `github_token_encrypted` column exists).
+2. **Update RLS Policies:** Done in previous step (allowing users R/W access to their own profile).
+3. **Create Encryption Utility** (`src/lib/encryption.server.ts`): Done. Uses Node.js `crypto` and `ENCRYPTION_KEY` env var.
+4. **Modify Auth Callback Route** (`src/app/auth/callback/route.ts`): Done. After successful `exchangeCodeForSession`:
+    - Retrieves the session and user data.
+    - Extracts `session.provider_token`.
+    - Encrypts the token using the encryption utility.
+    - Initializes a Supabase client using the `SUPABASE_SERVICE_ROLE_KEY`.
+    - Upserts the user `id`, profile info (from `user.user_metadata`), and encrypted token into `public.users`.
 5. **Test:**
-   - Unit: Test encryption utility (if applicable). Test Supabase function/trigger logic.
-   - Integration: Log in via GitHub, verify user record in `public.users` with an encrypted token.
+   - Unit: Test encryption/decryption utility (if applicable).
+   - Integration: Log in via GitHub, verify user record in `public.users` with profile info and an encrypted token.
 
 ---
 
