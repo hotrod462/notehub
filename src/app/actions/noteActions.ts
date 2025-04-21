@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { decrypt } from '@/lib/encryption.server';
-import { getGithubUser, commitFile, getRepoFileContent, getRepoTree } from '@/lib/githubService.server'; // Assuming commitFile exists/will exist
+import { getGithubUser, commitFile, getRepoFileContent, getRepoTree, checkRepoExists, createGithubRepo } from '@/lib/githubService.server'; // Added checkRepoExists, createGithubRepo
 // Import types if necessary (e.g., for Supabase data)
 
 interface SaveNoteResult {
@@ -33,6 +33,13 @@ interface GetTreeResult {
     success: boolean;
     tree?: TreeNode[];
     error?: string;
+}
+
+interface EnsureRepoResult {
+    success: boolean;
+    repoName?: string;
+    error?: string;
+    created?: boolean; // Flag to indicate if repo was newly created
 }
 
 export async function saveNote(notePath: string, content: string): Promise<SaveNoteResult> {
@@ -181,6 +188,94 @@ export async function loadNote(notePath: string): Promise<LoadNoteResult> {
     } catch (error: any) {
         console.error(`Error loading note ${notePath} from GitHub:`, error);
         return { success: false, error: error.message || 'Failed to load note from GitHub.' };
+    }
+}
+
+// Added ensureUserRepo server action
+export async function ensureUserRepo(): Promise<EnsureRepoResult> {
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { cookies: { get: (name) => cookieStore.get(name)?.value } }
+    );
+
+    // 1. Get User & Profile
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+        return { success: false, error: 'User not authenticated.' };
+    }
+
+    const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('github_repo_name, github_token_encrypted')
+        .eq('id', user.id)
+        .single();
+
+    if (profileError) { // Note: !profile is okay if repo name is null
+        return { success: false, error: 'Could not fetch user profile.' };
+    }
+    
+    // If repo name exists in profile, assume it's okay for now. 
+    // TODO: Optionally add verification step using checkRepoExists
+    if (profile?.github_repo_name) {
+        console.log(`User ${user.id} already has repo configured: ${profile.github_repo_name}`);
+        return { success: true, repoName: profile.github_repo_name, created: false };
+    }
+
+    // Repo name not set, proceed to create/verify
+    console.log(`Repo name not set for user ${user.id}. Ensuring repository exists...`);
+
+    if (!profile?.github_token_encrypted) {
+        return { success: false, error: 'Encrypted GitHub token not found. Cannot create repo.' };
+    }
+
+    // 2. Decrypt Token
+    const decryptedToken = decrypt(profile.github_token_encrypted);
+    if (!decryptedToken) {
+        return { success: false, error: 'Failed to decrypt GitHub token.' };
+    }
+
+    try {
+        // 3. Get GitHub Username & Determine Repo Name
+        const githubUser = await getGithubUser(decryptedToken);
+        const owner = githubUser.login;
+        // Define a standard repo name format
+        const repoName = `notehub-notes-${owner}`; 
+        let repoExisted = false;
+        let repoWasCreated = false;
+
+        console.log(`Checking for repository: ${owner}/${repoName}`);
+        repoExisted = await checkRepoExists(decryptedToken, owner, repoName);
+
+        if (!repoExisted) {
+            console.log(`Repository ${owner}/${repoName} not found. Creating...`);
+            await createGithubRepo(decryptedToken, repoName);
+            console.log(`Successfully created repository: ${owner}/${repoName}`);
+            repoWasCreated = true;
+        } else {
+            console.log(`Repository ${owner}/${repoName} already exists.`);
+        }
+
+        // 4. Update Supabase Profile with Repo Name
+        const { error: updateError } = await supabase
+            .from('users')
+            .update({ github_repo_name: repoName })
+            .eq('id', user.id);
+
+        if (updateError) {
+            console.error(`Failed to update Supabase profile for user ${user.id} with repo name ${repoName}:`, updateError);
+            // If we created the repo but failed to save to DB, this is problematic. 
+            // Manual intervention might be needed, or add retry logic.
+            return { success: false, error: `Failed to update profile after ensuring repo: ${updateError.message}` };
+        }
+
+        console.log(`Successfully ensured repo ${repoName} for user ${user.id} and updated profile.`);
+        return { success: true, repoName: repoName, created: repoWasCreated };
+
+    } catch (error: any) {
+        console.error(`Error ensuring GitHub repository for user ${user.id}:`, error);
+        return { success: false, error: error.message || 'An unexpected error occurred while ensuring the GitHub repository.' };
     }
 }
 

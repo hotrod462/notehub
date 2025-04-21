@@ -2,6 +2,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { encrypt } from '@/lib/encryption.server'; // Import the encrypt function
+import { ensureUserRepo } from '@/app/actions/noteActions'; // Import the ensureUserRepo server action
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -74,6 +75,20 @@ export async function GET(request: NextRequest) {
             // Redirect to homepage, but maybe flash an error message later
           } else {
             console.log("User profile synced successfully for:", user.id);
+            
+            // --- Ensure GitHub Repo --- 
+            // Call ensureUserRepo after successful profile sync
+            // We don't need to pass user/token here as the action gets them from cookies
+            console.log(`Calling ensureUserRepo for user ${user.id}...`);
+            const repoResult = await ensureUserRepo();
+            if (repoResult.success) {
+                console.log(`ensureUserRepo successful for user ${user.id}. Repo: ${repoResult.repoName}, Created: ${repoResult.created}`);
+            } else {
+                console.error(`ensureUserRepo failed for user ${user.id}: ${repoResult.error}`);
+                // Non-critical error for login flow, log and continue.
+                // Could add user-facing notification later if needed.
+            }
+            // --- End Ensure GitHub Repo ---
           }
         } else {
            console.warn("No provider_token found in session after code exchange for user:", user.id);

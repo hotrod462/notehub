@@ -2,10 +2,12 @@
 
 import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { Markdown } from 'tiptap-markdown';
 import React, { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Bold, Italic, Heading1, Heading2, Heading3 } from 'lucide-react';
 import { Toggle } from "@/components/ui/toggle";
+import Heading from '@tiptap/extension-heading';
 
 interface NoteEditorProps {
   initialContent?: string;
@@ -73,7 +75,16 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ initialContent = '', onSave }) 
   const [isSaving, setIsSaving] = useState(false);
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        heading: false,
+      }),
+      Markdown.configure({
+        html: false,
+        tightLists: true,
+        linkify: true,
+        breaks: true,
+      }),
+      Heading.configure({ levels: [1, 2, 3] }),
     ],
     content: initialContent,
     immediatelyRender: false,
@@ -87,7 +98,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ initialContent = '', onSave }) 
   const handleSave = async () => {
     if (!editor || !onSave) return;
     setIsSaving(true);
-    const contentToSave = editor.getHTML();
+    const contentToSave = editor.storage.markdown.getMarkdown();
     try {
       await onSave(contentToSave);
     } catch (error) {
