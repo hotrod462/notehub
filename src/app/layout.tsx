@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Button } from "@/components/ui/button";
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { signInWithGithub, signOut } from "@/app/auth/actions";
+import { Toaster } from "@/components/ui/sonner";
+import { FileTreeSidebar } from "@/components/FileTreeSidebar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -22,13 +24,31 @@ export const metadata: Metadata = {
 };
 
 async function AppHeader() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get: (name) => cookieStore.get(name)?.value, 
-                 set: (name, value, options) => cookieStore.set({ name, value, ...options }),
-                 remove: (name, options) => cookieStore.delete({ name, ...options }) } }
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value, ...options });
+          } catch (error) {
+            console.warn("Supabase SSR: Error setting cookie in Server Component Header", error);
+          }
+        },
+        remove(name: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value: '', ...options });
+          } catch (error) { 
+             console.warn("Supabase SSR: Error removing cookie in Server Component Header", error);
+          }
+        },
+      },
+    }
   );
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -75,9 +95,13 @@ export default async function RootLayout({
       >
         {/* @ts-expect-error Server Component */}
         <AppHeader />
-        <main className="flex-1 container py-6">
-          {children}
-        </main>
+        <div className="flex flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <FileTreeSidebar />
+          <main className="flex-1 pl-4">
+            {children}
+          </main>
+        </div>
+        <Toaster />
       </body>
     </html>
   );
