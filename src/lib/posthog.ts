@@ -37,7 +37,8 @@ function getPostHogClient(): PostHog {
 }
 
 // Export the function to get the client instance
-export const posthog = getPostHogClient(); // Use export const
+// export const posthog = getPostHogClient(); // REMOVE this line
+export { getPostHogClient }; // ADD this line
 
 // Optional: Export a function to handle shutdown gracefully if needed globally
 export async function shutdownPostHog() { // Use export async function

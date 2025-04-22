@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { encrypt } from '@/lib/encryption.server'; // Import the encrypt function
 import { ensureUserRepo } from '@/app/actions/repoActions'; // Corrected import path
 // import { PostHog } from 'posthog-node'; // Remove local import
-import { posthog, shutdownPostHog } from '@/lib/posthog'; // Import shared client and shutdown function from correct path
+import { getPostHogClient, shutdownPostHog } from '@/lib/posthog'; // Import getPostHogClient and shutdownPostHog
 
 // Remove local PostHog server-side client initialization
 // const posthog = new PostHog(
@@ -93,7 +93,8 @@ export async function GET(request: NextRequest) {
             // --- PostHog Event ---
             // Identify the user and capture the sign-in event
             console.log("[PostHog Debug] Attempting to identify user:", user.id);
-            posthog.identify({
+            const client = getPostHogClient(); // Get client instance here
+            client.identify({
               distinctId: user.id,
               properties: {
                 email: user.email, // Assuming email is available
@@ -104,7 +105,7 @@ export async function GET(request: NextRequest) {
             console.log("[PostHog Debug] Identify call finished for user:", user.id);
 
             console.log("[PostHog Debug] Attempting to capture event 'user_signed_in' for:", user.id);
-            posthog.capture({
+            client.capture({
               distinctId: user.id,
               event: 'user_signed_in'
             });

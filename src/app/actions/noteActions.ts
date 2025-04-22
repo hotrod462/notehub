@@ -5,8 +5,7 @@ import { createServerClient } from '@supabase/ssr';
 import { decrypt } from '@/lib/encryption.server';
 import { getGithubUser, commitFile, getRepoFileContent, getRepoTree, getCommitHistoryForFile, getFileContentAtCommit } from '@/lib/githubService.server'; // Added history functions
 import { ensureUserRepo } from './repoActions'; // Import the correct ensureUserRepo
-import { posthog } from '@/lib/posthog'; // Import shared PostHog client
-import { shutdownPostHog } from '@/lib/posthog'; // Import shutdownPostHog
+import { getPostHogClient, shutdownPostHog } from '@/lib/posthog'; // Import getPostHogClient and shutdownPostHog
 // Import types if necessary (e.g., for Supabase data)
 
 interface SaveNoteResult {
@@ -153,7 +152,8 @@ export async function saveNote(
         // --- PostHog Event ---
         if (user) { // Ensure user is available
           console.log(`[PostHog Debug] Attempting to capture event 'note_saved' for user: ${user.id}, path: ${notePath}`);
-          posthog.capture({
+          const client = getPostHogClient(); // Get client instance here
+          client.capture({
             distinctId: user.id,
             event: 'note_saved',
             properties: {
@@ -243,7 +243,8 @@ export async function createNote(filePath: string, initialContent: string = ''):
         // --- PostHog Event ---
         if (user) { // Ensure user is available (should be)
           console.log(`[PostHog Debug] Attempting to capture event 'note_created' for user: ${user.id}, path: ${filePath}`);
-          posthog.capture({
+          const client = getPostHogClient(); // Get client instance here
+          client.capture({
             distinctId: user.id,
             event: 'note_created',
             properties: {
