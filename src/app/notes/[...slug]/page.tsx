@@ -296,7 +296,7 @@ const NotePage: React.FC = () => { // No props needed here now
                         Drafts
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" className="w-[300px] bg-white dark:bg-zinc-950 z-50">
                    <DropdownMenuLabel>Note History (Drafts)</DropdownMenuLabel>
                    <DropdownMenuSeparator />
                    <DropdownMenuItem 
