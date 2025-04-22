@@ -6,8 +6,9 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { signInWithGithub, signOut } from "@/app/auth/actions";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "next-themes";
+import { ThemeToggle } from "@/components/ThemeToggle";
 // import { FileTreeSidebar } from "@/components/FileTreeSidebar";
-// import { ThemeToggle } from "@/components/ThemeToggle";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -66,6 +67,7 @@ async function AppHeader() {
           </a>
         </div>
         <div className="flex flex-1 items-center justify-end space-x-2">
+          <ThemeToggle />
           {isLoggedIn ? (
             <>
               <p className="text-sm mr-2">{user.email}</p>
@@ -92,11 +94,18 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased flex flex-col min-h-screen`}
       >
-        <AppHeader />
-        <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          {children}
-        </main>
-        <Toaster />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <AppHeader />
+          <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            {children}
+          </main>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );
