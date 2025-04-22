@@ -65,6 +65,20 @@ interface GetVersionResult {
 
 // --- End of History Actions ---
 
+// --- New Interface for CreateNote Result ---
+interface CreateNoteResult {
+    success: boolean;
+    error?: string;
+    filePath?: string; // Optionally return the path created
+}
+
+// --- New Interface for CreateFolder Result ---
+interface CreateFolderResult {
+    success: boolean;
+    error?: string;
+    folderPath?: string; // Optionally return the path created
+}
+
 export async function saveNote(notePath: string, content: string): Promise<SaveNoteResult> {
     if (!notePath) {
         return { success: false, error: 'Note path is required.' };
@@ -139,6 +153,159 @@ export async function saveNote(notePath: string, content: string): Promise<SaveN
     } catch (error: any) {
         console.error(`Error saving note ${notePath} to GitHub:`, error);
         return { success: false, error: error.message || 'Failed to save note to GitHub.' };
+    }
+}
+
+// New createNote server action
+export async function createNote(filePath: string, initialContent: string = ''): Promise<CreateNoteResult> {
+    if (!filePath || !filePath.endsWith('.md')) {
+        return { success: false, error: 'Invalid file path. Must end with .md' };
+    }
+
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { cookies: { get: (name) => cookieStore.get(name)?.value } }
+    );
+
+    // 1. Get User & Profile
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+        return { success: false, error: 'User not authenticated.' };
+    }
+
+    const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('github_repo_name, github_token_encrypted')
+        .eq('id', user.id)
+        .single();
+
+    if (profileError || !profile) {
+        return { success: false, error: 'Could not fetch user profile.' };
+    }
+    if (!profile.github_repo_name) {
+        return { success: false, error: 'GitHub repository name not set for user.' };
+    }
+    if (!profile.github_token_encrypted) {
+        return { success: false, error: 'Encrypted GitHub token not found.' };
+    }
+
+    // 2. Decrypt Token
+    const decryptedToken = decrypt(profile.github_token_encrypted);
+    if (!decryptedToken) {
+        return { success: false, error: 'Failed to decrypt GitHub token.' };
+    }
+
+    try {
+        // 3. Get GitHub Username
+        const githubUser = await getGithubUser(decryptedToken);
+        const owner = githubUser.login;
+        const repo = profile.github_repo_name;
+
+        // 4. Prepare for Commit
+        const commitMessage = `Create note: ${filePath}`;
+        // Encode initial content (even if empty)
+        const contentBase64 = Buffer.from(initialContent, 'utf8').toString('base64');
+
+        // 5. Call GitHub Service to Commit (createOrUpdateFileContents handles creation)
+        await commitFile(
+            decryptedToken,
+            owner,
+            repo,
+            filePath,
+            contentBase64,
+            commitMessage
+        );
+
+        console.log(`Successfully created note ${owner}/${repo}/${filePath}`);
+        return { success: true, filePath };
+
+    } catch (error: any) {
+        console.error(`Error creating note ${filePath} on GitHub:`, error);
+        // Check for specific errors, e.g., file already exists (though commitFile might handle it)
+        if (error.message?.includes('exists')) { // Basic check, improve if needed
+            return { success: false, error: `File already exists at path: ${filePath}` };
+        }
+        return { success: false, error: error.message || 'Failed to create note on GitHub.' };
+    }
+}
+
+// New createFolder server action
+export async function createFolder(folderPath: string): Promise<CreateFolderResult> {
+    if (!folderPath || folderPath.startsWith('/') || folderPath.includes('..') || folderPath.endsWith('/')) {
+        return { success: false, error: 'Invalid folder path. Use relative paths, no trailing slash.' };
+    }
+
+    // Construct the path for the .gitkeep file
+    const gitkeepPath = `${folderPath}/.gitkeep`;
+
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { cookies: { get: (name) => cookieStore.get(name)?.value } }
+    );
+
+    // 1. Get User & Profile (Copied from createNote - consider abstracting common parts)
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+        return { success: false, error: 'User not authenticated.' };
+    }
+
+    const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('github_repo_name, github_token_encrypted')
+        .eq('id', user.id)
+        .single();
+
+    if (profileError || !profile) {
+        return { success: false, error: 'Could not fetch user profile.' };
+    }
+    if (!profile.github_repo_name) {
+        return { success: false, error: 'GitHub repository name not set for user.' };
+    }
+    if (!profile.github_token_encrypted) {
+        return { success: false, error: 'Encrypted GitHub token not found.' };
+    }
+
+    // 2. Decrypt Token
+    const decryptedToken = decrypt(profile.github_token_encrypted);
+    if (!decryptedToken) {
+        return { success: false, error: 'Failed to decrypt GitHub token.' };
+    }
+
+    try {
+        // 3. Get GitHub Username
+        const githubUser = await getGithubUser(decryptedToken);
+        const owner = githubUser.login;
+        const repo = profile.github_repo_name;
+
+        // 4. Prepare for Commit
+        const commitMessage = `Create folder: ${folderPath}`;
+        // Create empty content for .gitkeep
+        const contentBase64 = Buffer.from('', 'utf8').toString('base64');
+
+        // 5. Call GitHub Service to Commit the .gitkeep file
+        await commitFile(
+            decryptedToken,
+            owner,
+            repo,
+            gitkeepPath, // Path to the .gitkeep file
+            contentBase64,
+            commitMessage
+        );
+
+        console.log(`Successfully created folder ${folderPath} (via ${gitkeepPath}) in ${owner}/${repo}`);
+        return { success: true, folderPath };
+
+    } catch (error: any) {
+        console.error(`Error creating folder ${folderPath} (via ${gitkeepPath}) on GitHub:`, error);
+        // Check for specific errors, e.g., file already exists
+        if (error.message?.includes('exists')) { 
+            return { success: false, error: `File/Folder already exists at path: ${folderPath}` };
+        }
+        return { success: false, error: error.message || 'Failed to create folder on GitHub.' };
     }
 }
 

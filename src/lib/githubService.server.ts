@@ -142,8 +142,9 @@ export async function commitFile(
   contentBase64: string, // Expecting base64 encoded content
   message: string
 ): Promise<any> { // Replace 'any' with specific Octokit response type later
-  if (!token || !owner || !repo || !path || !contentBase64 || !message) {
-    throw new Error("Missing required parameters for commitFile.");
+  // Allow empty string for contentBase64 (for creating empty files)
+  if (!token || !owner || !repo || !path || contentBase64 === null || contentBase64 === undefined || !message) {
+    throw new Error("Missing required parameters for commitFile (token, owner, repo, path, message are required; content can be empty string).");
   }
   const octokit = new Octokit({ auth: token });
 
