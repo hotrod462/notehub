@@ -20,7 +20,7 @@ function getPostHogClient(): PostHog {
         posthogClient = new PostHog(
             apiKey,
             {
-                host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.posthog.com',
+                host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
                 // Optionally disable if you don't want events sent in development
                 // enabled: process.env.NODE_ENV === 'production',
                 flushAt: 1, // Send events immediately

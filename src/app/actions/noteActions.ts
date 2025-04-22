@@ -151,6 +151,7 @@ export async function saveNote(
 
         // --- PostHog Event ---
         if (user) { // Ensure user is available
+          console.log(`[PostHog Debug] Attempting to capture event 'note_saved' for user: ${user.id}, path: ${notePath}`);
           posthog.capture({
             distinctId: user.id,
             event: 'note_saved',
@@ -159,6 +160,7 @@ export async function saveNote(
               commit_message_length: finalCommitMessage.length // Example property
             }
           });
+          console.log("[PostHog Debug] Capture call finished for 'note_saved'.");
         }
         // --- End PostHog Event ---
 
@@ -237,6 +239,7 @@ export async function createNote(filePath: string, initialContent: string = ''):
 
         // --- PostHog Event ---
         if (user) { // Ensure user is available (should be)
+          console.log(`[PostHog Debug] Attempting to capture event 'note_created' for user: ${user.id}, path: ${filePath}`);
           posthog.capture({
             distinctId: user.id,
             event: 'note_created',
@@ -245,6 +248,7 @@ export async function createNote(filePath: string, initialContent: string = ''):
               initial_content_empty: initialContent.length === 0 // Example property
             }
           });
+          console.log("[PostHog Debug] Capture call finished for 'note_created'.");
         }
         // --- End PostHog Event ---
 

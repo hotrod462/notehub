@@ -92,6 +92,7 @@ export async function GET(request: NextRequest) {
             
             // --- PostHog Event ---
             // Identify the user and capture the sign-in event
+            console.log("[PostHog Debug] Attempting to identify user:", user.id);
             posthog.identify({
               distinctId: user.id,
               properties: {
@@ -100,10 +101,14 @@ export async function GET(request: NextRequest) {
                 avatar_url: user.user_metadata?.avatar_url
               }
             });
+            console.log("[PostHog Debug] Identify call finished for user:", user.id);
+
+            console.log("[PostHog Debug] Attempting to capture event 'user_signed_in' for:", user.id);
             posthog.capture({
               distinctId: user.id,
               event: 'user_signed_in'
             });
+            console.log("[PostHog Debug] Capture call finished for 'user_signed_in'.");
             // Make sure events are sent before the function potentially exits
             // await posthog.shutdownAsync(); // Consider if shutdown is needed based on env (Vercel etc.) - potentially causes delays
 
