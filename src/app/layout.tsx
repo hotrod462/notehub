@@ -10,6 +10,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "next-themes";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import Link from 'next/link';
+import { PostHogProvider } from "../components/PostHogProvider";
 // import { Link } from "react-router-dom";
 // import { Package2 } from "lucide-react";
 // import { FileTreeSidebar } from "@/components/FileTreeSidebar";
@@ -51,8 +52,8 @@ async function AppHeader() {
         remove(name: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value: '', ...options });
-          } catch (error) { 
-             console.warn("Supabase SSR: Error removing cookie in Server Component Header", error);
+          } catch (error) {
+            console.warn("Supabase SSR: Error removing cookie in Server Component Header", error);
           }
         },
       },
@@ -94,9 +95,7 @@ async function AppHeader() {
 
 export default async function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -119,20 +118,20 @@ export default async function RootLayout({
           `}
         </Script>
       </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased flex flex-col min-h-screen`}
-      >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          disableTransitionOnChange
-        >
-          <AppHeader />
-          <main className="flex-1">
-            {children}
-          </main>
-          <Toaster />
-        </ThemeProvider>
+      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased flex flex-col min-h-screen`}>
+        <PostHogProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="dark"
+            disableTransitionOnChange
+          >
+            <AppHeader />
+            <main className="flex-1">
+              {children}
+            </main>
+            <Toaster />
+          </ThemeProvider>
+        </PostHogProvider>
       </body>
     </html>
   );

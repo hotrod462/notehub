@@ -5,6 +5,7 @@ import { createServerClient } from '@supabase/ssr';
 import { decrypt } from '@/lib/encryption.server';
 import { getGithubUser, commitFile, getRepoFileContent, getRepoTree, getCommitHistoryForFile, getFileContentAtCommit } from '@/lib/githubService.server'; // Added history functions
 import { ensureUserRepo } from './repoActions'; // Import the correct ensureUserRepo
+import { posthog } from '@/lib/posthog'; // Import shared PostHog client
 // Import types if necessary (e.g., for Supabase data)
 
 interface SaveNoteResult {
@@ -147,6 +148,20 @@ export async function saveNote(
         // Check commitResult (assuming it returns success/failure or commit data)
         // For now, assume success if no error thrown
         console.log(`Successfully committed changes to ${owner}/${repo}/${notePath} with message: "${finalCommitMessage}"`);
+
+        // --- PostHog Event ---
+        if (user) { // Ensure user is available
+          posthog.capture({
+            distinctId: user.id,
+            event: 'note_saved',
+            properties: {
+              note_path: notePath,
+              commit_message_length: finalCommitMessage.length // Example property
+            }
+          });
+        }
+        // --- End PostHog Event ---
+
         return { success: true };
 
     } catch (error: unknown) {
@@ -219,6 +234,20 @@ export async function createNote(filePath: string, initialContent: string = ''):
         );
 
         console.log(`Successfully created note ${owner}/${repo}/${filePath}`);
+
+        // --- PostHog Event ---
+        if (user) { // Ensure user is available (should be)
+          posthog.capture({
+            distinctId: user.id,
+            event: 'note_created',
+            properties: {
+              note_path: filePath,
+              initial_content_empty: initialContent.length === 0 // Example property
+            }
+          });
+        }
+        // --- End PostHog Event ---
+
         return { success: true, filePath };
 
     } catch (error: unknown) {

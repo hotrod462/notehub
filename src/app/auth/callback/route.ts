@@ -3,6 +3,20 @@ import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { encrypt } from '@/lib/encryption.server'; // Import the encrypt function
 import { ensureUserRepo } from '@/app/actions/repoActions'; // Corrected import path
+// import { PostHog } from 'posthog-node'; // Remove local import
+import { posthog, shutdownPostHog } from '@/lib/posthog'; // Import shared client and shutdown function from correct path
+
+// Remove local PostHog server-side client initialization
+// const posthog = new PostHog(
+//   process.env.NEXT_PUBLIC_POSTHOG_KEY!,
+//   {
+//     host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.posthog.com', // Use existing host or default
+//     // Optionally disable if you don't want events sent in development
+//     // enabled: process.env.NODE_ENV === 'production', 
+//     flushAt: 1, // Send events immediately
+//     flushInterval: 0 // Don't batch events
+//   }
+// );
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -76,6 +90,25 @@ export async function GET(request: NextRequest) {
           } else {
             console.log("User profile synced successfully for:", user.id);
             
+            // --- PostHog Event ---
+            // Identify the user and capture the sign-in event
+            posthog.identify({
+              distinctId: user.id,
+              properties: {
+                email: user.email, // Assuming email is available
+                full_name: user.user_metadata?.full_name || user.user_metadata?.name,
+                avatar_url: user.user_metadata?.avatar_url
+              }
+            });
+            posthog.capture({
+              distinctId: user.id,
+              event: 'user_signed_in'
+            });
+            // Make sure events are sent before the function potentially exits
+            // await posthog.shutdownAsync(); // Consider if shutdown is needed based on env (Vercel etc.) - potentially causes delays
+
+            // --- End PostHog Event ---
+
             // --- Ensure GitHub Repo --- 
             // Call ensureUserRepo after successful profile sync
             // We don't need to pass user/token here as the action gets them from cookies
@@ -101,10 +134,23 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       // Catch any unexpected errors during the process
       console.error("Unexpected error during auth callback:", error);
+      // Ensure PostHog client is shut down cleanly in case of error
+      // await posthog.shutdownAsync(); // Remove incorrect call
+      await shutdownPostHog(); // Use shared shutdown function
       return NextResponse.redirect(`${requestUrl.origin}/auth-error?message=An unexpected error occurred`);
     }
   }
 
   // URL to redirect to after sign in process completes
+  // Ensure PostHog client is shut down cleanly before redirecting
+  // await posthog.shutdownAsync(); // Remove incorrect call
+  // No explicit shutdown needed here with flushAt: 1 in client config
   return NextResponse.redirect(requestUrl.origin);
-} 
+}
+
+// Remove commented out shutdown handlers
+// // Ensure PostHog client is shut down when the application exits
+// // This might be handled differently depending on your deployment environment (e.g., Vercel)
+// // process.on('exit', () => posthog.shutdown());
+// // process.on('SIGINT', () => posthog.shutdown());
+// // process.on('SIGTERM', () => posthog.shutdown()); 
