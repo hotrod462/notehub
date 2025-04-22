@@ -4,7 +4,7 @@ import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown } from 'tiptap-markdown';
 import Link from '@tiptap/extension-link';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Button } from '@/components/ui/button';
 import { Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Code, Quote, LinkIcon } from 'lucide-react';
 import { Toggle } from "@/components/ui/toggle";
@@ -12,8 +12,12 @@ import Heading from '@tiptap/extension-heading';
 
 interface NoteEditorProps {
   initialContent?: string;
-  onSave?: (content: string) => Promise<void>;
   readOnly?: boolean;
+}
+
+export interface NoteEditorRef {
+  getMarkdown: () => string;
+  isEmpty: () => boolean;
 }
 
 const EditorToolbar = ({ editor }: { editor: Editor | null }) => {
@@ -128,8 +132,10 @@ const EditorToolbar = ({ editor }: { editor: Editor | null }) => {
   );
 };
 
-const NoteEditor: React.FC<NoteEditorProps> = ({ initialContent = '', onSave, readOnly = false }) => {
-  const [isSaving, setIsSaving] = useState(false);
+const NoteEditor = forwardRef<NoteEditorRef, NoteEditorProps>((
+  { initialContent = '', readOnly = false }, 
+  ref
+) => {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -159,18 +165,16 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ initialContent = '', onSave, re
     },
   });
 
-  const handleSave = async () => {
-    if (!editor || !onSave) return;
-    setIsSaving(true);
-    const contentToSave = editor.storage.markdown.getMarkdown();
-    try {
-      await onSave(contentToSave);
-    } catch (error) {
-      console.error("Failed to save note:", error);
-    } finally {
-      setIsSaving(false);
+  useImperativeHandle(ref, () => ({
+    getMarkdown: () => {
+      if (!editor) return '';
+      return editor.storage.markdown.getMarkdown();
+    },
+    isEmpty: () => {
+       if (!editor) return true;
+       return editor.isEmpty;
     }
-  };
+  }));
 
   if (!editor) {
     return null;
@@ -180,16 +184,10 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ initialContent = '', onSave, re
     <div>
       <EditorToolbar editor={editor} />
       <EditorContent editor={editor} />
-      <div className="mt-4 flex justify-end">
-        <Button 
-          onClick={handleSave} 
-          disabled={isSaving || !onSave || editor.isEmpty || readOnly}
-        >
-          {isSaving ? 'Saving...' : 'Save Note'}
-        </Button>
-      </div>
     </div>
   );
-};
+});
+
+NoteEditor.displayName = 'NoteEditor';
 
 export default NoteEditor; 

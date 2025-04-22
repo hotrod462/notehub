@@ -1,7 +1,8 @@
 'use client'; // This page needs to be a client component to use the NoteEditor
 
 import NoteEditor from '@/components/NoteEditor';
-import React, { useState, useEffect, useCallback } from 'react'; // Import useState, useEffect, useCallback
+import type { NoteEditorRef } from '@/components/NoteEditor';
+import React, { useState, useEffect, useCallback, useRef } from 'react'; // Import useState, useEffect, useCallback, useRef
 import { useParams } from 'next/navigation'; // Import useParams hook
 import { saveNote, loadNote, getNoteHistory, getNoteVersion, CommitInfo } from '@/app/actions/noteActions'; // Import the server action and loadNote
 import { toast } from "sonner"; // Using sonner for feedback (needs installation)
@@ -14,7 +15,18 @@ import {
     DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu"; 
 import { Button } from '@/components/ui/button';
-import { History, Loader2 } from 'lucide-react'; // Removed PanelLeft, PanelRight
+import { History, Loader2, Save } from 'lucide-react'; // Removed PanelLeft, PanelRight
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose, // Import DialogClose
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 // Remove params from props, as we'll get them from the hook
 // interface NotePageProps {
@@ -25,6 +37,9 @@ import { History, Loader2 } from 'lucide-react'; // Removed PanelLeft, PanelRigh
 
 const NotePage: React.FC = () => { // No props needed here now
   const params = useParams<{ slug: string[] }>(); // Use the hook to get params
+  const [isCommitDialogOpen, setIsCommitDialogOpen] = useState(false);
+  const [commitMessage, setCommitMessage] = useState('');
+  const editorRef = useRef<NoteEditorRef | null>(null); // Update ref type to match the exported type
   const [initialLoadComplete, setInitialLoadComplete] = useState(false); // Track initial load
   const [latestContent, setLatestContent] = useState<string>(''); // Store latest content separately
   const [displayedContent, setDisplayedContent] = useState<string>(''); // Content shown in editor
@@ -152,71 +167,131 @@ const NotePage: React.FC = () => { // No props needed here now
   const slug = params.slug; 
   const notePath = slug.join('/');
 
-  const handleSaveNote = async (content: string) => {
-    console.log(`Saving note: ${notePath}`);
-    // Prevent saving if viewing history
-    if (selectedCommitSha !== null) {
-        toast.error("Cannot save while viewing history.");
-        return;
-    }
-    try {
-      const result = await saveNote(notePath, content);
-      if (result.success) {
-        toast.success("Note saved successfully!");
-        setLatestContent(content); // Update latest content state after successful save
-        setHistory(null); // Clear cached history as it's now outdated
-      } else {
-        toast.error(`Failed to save: ${result.error || 'Unknown error'}`);
+  const handlePromptSave = () => {
+      if (isReadOnly) {
+          toast.error("Cannot save while viewing history.");
+          return;
       }
-    } catch (error: any) {
-      console.error("Client-side error calling saveNote action:", error);
-      toast.error("An unexpected error occurred while trying to save.");
-    }
+      if (editorRef.current?.isEmpty()) {
+          toast.info("Nothing to save.");
+          return;
+      }
+
+      const defaultMessage = `Update ${notePath}`;
+      setCommitMessage(defaultMessage);
+      setIsCommitDialogOpen(true);
   };
 
-  // Determine if editor should be read-only
+  const handleConfirmSave = async () => {
+      const contentToSave = editorRef.current?.getMarkdown(); 
+      if (contentToSave === undefined || contentToSave === null) {
+          console.error("Could not get editor content to save.");
+          toast.error("Error getting content to save.");
+          setIsCommitDialogOpen(false);
+          return;
+      }
+
+      if (!commitMessage.trim()) {
+        toast.warning("Commit message cannot be empty.");
+        return;
+      }
+
+      console.log(`Saving note: ${notePath} with message: "${commitMessage}"`);
+      setIsCommitDialogOpen(false);
+
+      try {
+        const result = await saveNote(notePath, contentToSave, commitMessage); 
+        
+        if (result.success) {
+          toast.success("Note saved successfully!");
+          setLatestContent(contentToSave); 
+          setHistory(null); 
+        } else {
+          toast.error(`Failed to save: ${result.error || 'Unknown error'}`);
+        }
+      } catch (error: any) {
+        console.error("Client-side error calling saveNote action:", error);
+        toast.error("An unexpected error occurred while trying to save.");
+      } finally {
+          setCommitMessage('');
+      }
+  };
+
   const isReadOnly = selectedCommitSha !== null;
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        console.log("Ctrl+S detected");
+        if (!isReadOnly && initialLoadComplete) {
+            handlePromptSave();
+        } else {
+             toast.info("Cannot save while loading or viewing history.");
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isReadOnly, initialLoadComplete, handlePromptSave]);
 
   return (
     <div className="p-4 flex flex-col h-full">
-      <div className="flex justify-between items-center mb-4 flex-shrink-0">
-          <h1 className="text-2xl font-bold truncate" title={`Editing: ${notePath}`}>
-             Editing: {notePath}
+      <div className="flex justify-between items-center mb-4 flex-shrink-0 gap-2">
+          <h1 className="text-2xl font-bold truncate mr-4" title={`Editing: ${notePath}`}>
+             {notePath}
           </h1>
-          <DropdownMenu onOpenChange={(open) => open && !history && handleFetchHistory()}> 
-            <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" disabled={isHistoryLoading || !initialLoadComplete}>
-                    {isHistoryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-               <DropdownMenuLabel>Note History</DropdownMenuLabel>
-               <DropdownMenuSeparator />
-               <DropdownMenuItem 
-                   onSelect={() => handleSelectVersion(null)} 
-                   disabled={selectedCommitSha === null || isVersionLoading}
-               >
-                   Latest Version
-               </DropdownMenuItem>
-               {history && history.length > 0 && <DropdownMenuSeparator />} 
-               {history && history.map((commit) => (
+          <div className="flex items-center gap-2">
+             <Button 
+                onClick={handlePromptSave}
+                disabled={isReadOnly || isVersionLoading || !initialLoadComplete}
+                size="sm"
+             >
+                  <Save className="mr-2 h-4 w-4" /> Save
+             </Button>
+
+             <DropdownMenu onOpenChange={(open) => open && !history && handleFetchHistory()}>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="default" disabled={isHistoryLoading || !initialLoadComplete}>
+                        {isHistoryLoading ? 
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 
+                            <History className="mr-2 h-4 w-4" />
+                        }
+                        Drafts
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                   <DropdownMenuLabel>Note History (Drafts)</DropdownMenuLabel>
+                   <DropdownMenuSeparator />
                    <DropdownMenuItem 
-                       key={commit.sha}
-                       onSelect={() => handleSelectVersion(commit.sha)}
-                       disabled={selectedCommitSha === commit.sha || isVersionLoading}
+                       onSelect={() => handleSelectVersion(null)} 
+                       disabled={selectedCommitSha === null || isVersionLoading}
                    >
-                       <div className="text-sm">
-                          <p className="font-medium truncate" title={commit.message}>{commit.message || 'No commit message'}</p>
-                          <p className="text-xs text-muted-foreground">
-                              {commit.sha.substring(0, 7)} by {commit.author || 'Unknown'} on {commit.date ? new Date(commit.date).toLocaleDateString() : '-'}
-                          </p>
-                       </div>
+                       Latest Version
                    </DropdownMenuItem>
-               ))}
-               {history?.length === 0 && <DropdownMenuItem disabled>No history found</DropdownMenuItem>} 
-               {!history && !isHistoryLoading && <DropdownMenuItem disabled>Could not load history</DropdownMenuItem>} 
-            </DropdownMenuContent>
-        </DropdownMenu>
+                   {history && history.length > 0 && <DropdownMenuSeparator />} 
+                   {history && history.map((commit) => (
+                       <DropdownMenuItem 
+                           key={commit.sha}
+                           onSelect={() => handleSelectVersion(commit.sha)}
+                           disabled={selectedCommitSha === commit.sha || isVersionLoading}
+                       >
+                           <div className="text-sm">
+                              <p className="font-medium truncate" title={commit.message}>{commit.message || 'No commit message'}</p>
+                              <p className="text-xs text-muted-foreground">
+                                  {commit.sha.substring(0, 7)} by {commit.author || 'Unknown'} on {commit.date ? new Date(commit.date).toLocaleDateString() : '-'}
+                              </p>
+                           </div>
+                       </DropdownMenuItem>
+                   ))}
+                   {history?.length === 0 && <DropdownMenuItem disabled>No history found</DropdownMenuItem>} 
+                   {!history && !isHistoryLoading && <DropdownMenuItem disabled>Could not load history</DropdownMenuItem>} 
+                </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
       </div>
 
       <div className="flex-grow overflow-hidden">
@@ -227,9 +302,9 @@ const NotePage: React.FC = () => { // No props needed here now
             </div>
           ) : initialLoadComplete ? (
             <NoteEditor 
+              ref={editorRef} 
               key={`${notePath}-${selectedCommitSha || 'latest'}`} 
               initialContent={displayedContent} 
-              onSave={handleSaveNote} 
               readOnly={isReadOnly} 
             />
           ) : (
@@ -239,6 +314,44 @@ const NotePage: React.FC = () => { // No props needed here now
             </div>
           )}
       </div>
+
+       <Dialog open={isCommitDialogOpen} onOpenChange={setIsCommitDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Save Changes</DialogTitle>
+              <DialogDescription>
+                Enter a brief message describing the changes you made. This will be the commit message.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label htmlFor="commit-message" className="text-right">
+                  Message
+                </label>
+                <Input
+                  id="commit-message"
+                  value={commitMessage}
+                  onChange={(e) => setCommitMessage(e.target.value)}
+                  className="col-span-3"
+                  placeholder={`Update ${notePath}`}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && commitMessage.trim()) { handleConfirmSave(); } }}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                 <Button type="button" variant="outline">Cancel</Button>
+              </DialogClose>
+              <Button 
+                 type="button"
+                 onClick={handleConfirmSave} 
+                 disabled={!commitMessage.trim()}
+               >
+                 Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
     </div>
   );
 };

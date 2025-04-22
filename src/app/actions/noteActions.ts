@@ -79,7 +79,11 @@ interface CreateFolderResult {
     folderPath?: string; // Optionally return the path created
 }
 
-export async function saveNote(notePath: string, content: string): Promise<SaveNoteResult> {
+export async function saveNote(
+    notePath: string, 
+    content: string, 
+    commitMessage?: string // Add optional commit message parameter
+): Promise<SaveNoteResult> { 
     if (!notePath) {
         return { success: false, error: 'Note path is required.' };
     }
@@ -126,28 +130,29 @@ export async function saveNote(notePath: string, content: string): Promise<SaveN
         const owner = githubUser.login;
         const repo = profile.github_repo_name;
 
-        // 4. Prepare for Commit (Get SHA if file exists - logic needed in githubService.commitFile)
-        // For now, we assume commitFile handles getting SHA internally or takes it as optional param
-        const commitMessage = `Update note: ${notePath}`;
+        // 4. Prepare for Commit 
+        // Use provided commit message or generate a default one
+        const finalCommitMessage = commitMessage?.trim() 
+            ? commitMessage.trim() 
+            : `Update note: ${notePath}`; // Default if none provided or empty
 
-        // Convert incoming HTML content to Base64
+        // Convert content to Base64 (assuming content is raw Markdown/text now)
         const contentBase64 = Buffer.from(content, 'utf8').toString('base64');
 
         // 5. Call GitHub Service to Commit
-        // The commitFile function in githubService needs full implementation
         const commitResult = await commitFile(
             decryptedToken,
             owner,
             repo,
-            notePath, // The path within the repo
-            contentBase64, // Pass base64 encoded HTML
-            commitMessage
-            // We might need to pass the file's SHA here if it's an update
+            notePath, 
+            contentBase64, 
+            finalCommitMessage // Pass the final commit message
+            // Need to ensure commitFile correctly handles getting file SHA for updates
         );
 
         // Check commitResult (assuming it returns success/failure or commit data)
         // For now, assume success if no error thrown
-        console.log(`Successfully committed HTML changes to ${owner}/${repo}/${notePath}`);
+        console.log(`Successfully committed changes to ${owner}/${repo}/${notePath} with message: "${finalCommitMessage}"`);
         return { success: true };
 
     } catch (error: any) {

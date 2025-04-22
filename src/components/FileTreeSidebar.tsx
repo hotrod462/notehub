@@ -168,8 +168,15 @@ export function FileTreeSidebar() {
   const [creationContextPath, setCreationContextPath] = useState<string>('');
   const router = useRouter();
   const params = useParams();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    
     const slug = params.slug;
     const notePath = Array.isArray(slug) ? slug.join('/') : null;
     if (notePath) {
@@ -178,7 +185,7 @@ export function FileTreeSidebar() {
     } else {
       setCreationContextPath('');
     }
-  }, [params.slug]);
+  }, [params.slug, mounted]);
 
   const fetchTree = useCallback(async (showLoading = true) => {
       if (showLoading) setIsLoading(true);
@@ -204,8 +211,9 @@ export function FileTreeSidebar() {
   }, []);
 
   useEffect(() => {
+    if (!mounted) return;
     fetchTree();
-  }, [fetchTree]);
+  }, [fetchTree, mounted]);
   
   const refreshTree = useCallback(() => {
      toast.info("Refreshing file tree...");
@@ -291,54 +299,81 @@ export function FileTreeSidebar() {
     }
   };
 
+  if (!mounted) {
+      return (
+        <div className="p-4 w-full h-full flex flex-col">
+            <div className="h-8 w-full bg-muted rounded mb-2"></div>
+            <div className="flex-grow space-y-1">
+                <div className="h-6 w-3/4 bg-muted rounded ml-4"></div>
+                <div className="h-6 w-1/2 bg-muted rounded ml-4"></div>
+                <div className="h-6 w-2/3 bg-muted rounded ml-8"></div>
+            </div>
+        </div>
+    );
+  }
+
   return (
-    <div className="p-4 flex flex-col h-full w-full">
-      <div className="flex justify-between items-center mb-1 flex-shrink-0">
-        <h2 className="text-lg font-semibold">Notes</h2>
-        <div className="flex items-center">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => setCreationContextPath('')} 
-            title="Target root directory"
-            className={creationContextPath === '' ? 'text-primary' : ''}
-          >
-             <Home className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={handleNewFolder} title="Create new folder in selected context">
-             <FolderPlus className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={handleNewFile} title="Create new file in selected context">
-             <FilePlus className="h-4 w-4" />
-          </Button>
+    <div className="p-2 w-full h-full flex flex-col overflow-hidden">
+      <div className="flex-shrink-0 flex items-center justify-between mb-2 p-1 border-b">
+        <h3 className="text-sm font-semibold ml-1">Notes</h3>
+        <div className="flex gap-1">
+             <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-7 w-7" 
+                title="Go to Root Notes"
+                onClick={() => router.push('/notes')}
+             >
+                <Home className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">Go to Root Notes</span>
+             </Button>
+            <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-7 w-7" 
+                title={`New Folder ${creationContextPath ? `in '${creationContextPath}'` : 'at root'}`}
+                onClick={handleNewFolder}
+             >
+                <FolderPlus className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">New Folder</span>
+            </Button>
+            <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-7 w-7" 
+                title={`New File ${creationContextPath ? `in '${creationContextPath}'` : 'at root'}`}
+                onClick={handleNewFile}
+             >
+                <FilePlus className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">New File</span>
+            </Button>
         </div>
       </div>
-      <div className="text-xs text-muted-foreground mb-2 truncate px-1 py-0.5 rounded bg-muted flex-shrink-0" title={`Creation context: ${creationContextPath || '/'}`}>
-         Create in: {creationContextPath ? `/${creationContextPath}` : '/'}
-      </div>
-      
-      <div className="flex-grow overflow-y-auto -mr-4 pr-4">
-          {isLoading ? (
-             <div className="flex items-center justify-center h-full">
-               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-             </div>
-          ) : error ? (
-             <div className="p-4 text-red-600">
-                 <p>Error loading tree:</p>
-                 <p className="text-sm">{error}</p>
-             </div>
-          ) : (
-              tree.length > 0 ? (
-                  tree.map(node => <TreeNode 
-                      key={node.path} 
-                      node={node} 
-                      creationContextPath={creationContextPath} 
-                      setCreationContextPath={setCreationContextPath}
-                    />)
-              ) : (
-                  <p className="text-sm text-muted-foreground italic p-4">No notes found.</p>
-              )
-          )}
+
+      <div className="flex-grow overflow-y-auto pr-1">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : error ? (
+          <div className="p-4 text-sm text-destructive-foreground bg-destructive rounded">
+            Error loading tree: {error}
+            <Button variant="secondary" size="sm" onClick={refreshTree} className="mt-2 w-full">
+              Retry
+            </Button>
+          </div>
+        ) : tree.length === 0 ? (
+          <div className="p-4 text-sm text-muted-foreground">
+            No notes found. Start by creating a file or folder.
+          </div>
+        ) : (
+          tree.map(node => <TreeNode 
+            key={node.path} 
+            node={node} 
+            creationContextPath={creationContextPath} 
+            setCreationContextPath={setCreationContextPath}
+           />)
+        )}
       </div>
     </div>
   );

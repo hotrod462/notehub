@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from 'next/script';
 import "./globals.css";
 import { Button } from "@/components/ui/button";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
@@ -65,6 +66,7 @@ async function AppHeader() {
               NoteHub
             </span>
           </a>
+          {/* TODO: Add navigation like file tree maybe? */}
         </div>
         <div className="flex flex-1 items-center justify-end space-x-2">
           <ThemeToggle />
@@ -76,7 +78,9 @@ async function AppHeader() {
               </form>
             </>
           ) : (
-            null
+            <form action={signInWithGithub}>
+              <Button variant="ghost" size="sm">Login with GitHub</Button>
+            </form>
           )}
         </div>
       </div>
@@ -91,13 +95,32 @@ export default async function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <Script id="markdown-it-isspace-fix" strategy="beforeInteractive">
+          {`
+           if (typeof window !== 'undefined' && typeof window.isSpace === 'undefined') {
+             window.isSpace = function(code) {
+                switch (code) {
+                   case 0x09: // Tab
+                   case 0x20: // Space
+                   case 0x0A: // LF
+                   case 0x0B: // VT
+                   case 0x0C: // FF
+                   case 0x0D: // CR
+                     return true;
+                 }
+                 return false;
+              };
+            }
+          `}
+        </Script>
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased flex flex-col min-h-screen`}
       >
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          defaultTheme="dark"
           disableTransitionOnChange
         >
           <AppHeader />
