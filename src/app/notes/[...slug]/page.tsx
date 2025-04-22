@@ -14,7 +14,7 @@ import {
     DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu"; 
 import { Button } from '@/components/ui/button';
-import { History, Loader2 } from 'lucide-react'; // Import History icon, Loader2
+import { History, Loader2 } from 'lucide-react'; // Removed PanelLeft, PanelRight
 
 // Remove params from props, as we'll get them from the hook
 // interface NotePageProps {
@@ -146,7 +146,7 @@ const NotePage: React.FC = () => { // No props needed here now
   // --- End History Handlers ---
 
   if (!params || !params.slug) {
-    return <div>Loading note path...</div>;
+    return <div className="p-4">Loading note path...</div>;
   }
   
   const slug = params.slug; 
@@ -178,57 +178,67 @@ const NotePage: React.FC = () => { // No props needed here now
   const isReadOnly = selectedCommitSha !== null;
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-4"> {/* Header container */} 
-          <h1 className="text-2xl font-bold">Editing: {notePath}</h1>
-          {/* History Dropdown Button */} 
-          <DropdownMenu onOpenChange={(open) => open && !history && handleFetchHistory()}> {/* Fetch history when opened if not already fetched */} 
+    <div className="p-4 flex flex-col h-full">
+      <div className="flex justify-between items-center mb-4 flex-shrink-0">
+          <h1 className="text-2xl font-bold truncate" title={`Editing: ${notePath}`}>
+             Editing: {notePath}
+          </h1>
+          <DropdownMenu onOpenChange={(open) => open && !history && handleFetchHistory()}> 
             <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon" disabled={isHistoryLoading || !initialLoadComplete}>
                     {isHistoryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Note History</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                    onSelect={() => handleSelectVersion(null)} 
-                    disabled={selectedCommitSha === null || isVersionLoading}
-                >
-                    Latest Version
-                </DropdownMenuItem>
-                {history && history.length > 0 && <DropdownMenuSeparator />} 
-                {history && history.map((commit) => (
-                    <DropdownMenuItem 
-                        key={commit.sha}
-                        onSelect={() => handleSelectVersion(commit.sha)}
-                        disabled={selectedCommitSha === commit.sha || isVersionLoading}
-                    >
-                        <div className="text-sm">
-                           <p className="font-medium truncate" title={commit.message}>{commit.message || 'No commit message'}</p>
-                           <p className="text-xs text-muted-foreground">
-                               {commit.sha.substring(0, 7)} by {commit.author || 'Unknown'} on {commit.date ? new Date(commit.date).toLocaleDateString() : '-'}
-                           </p>
-                        </div>
-                    </DropdownMenuItem>
-                ))}
-                {history?.length === 0 && <DropdownMenuItem disabled>No history found</DropdownMenuItem>} 
-                {!history && !isHistoryLoading && <DropdownMenuItem disabled>Could not load history</DropdownMenuItem>} 
+               <DropdownMenuLabel>Note History</DropdownMenuLabel>
+               <DropdownMenuSeparator />
+               <DropdownMenuItem 
+                   onSelect={() => handleSelectVersion(null)} 
+                   disabled={selectedCommitSha === null || isVersionLoading}
+               >
+                   Latest Version
+               </DropdownMenuItem>
+               {history && history.length > 0 && <DropdownMenuSeparator />} 
+               {history && history.map((commit) => (
+                   <DropdownMenuItem 
+                       key={commit.sha}
+                       onSelect={() => handleSelectVersion(commit.sha)}
+                       disabled={selectedCommitSha === commit.sha || isVersionLoading}
+                   >
+                       <div className="text-sm">
+                          <p className="font-medium truncate" title={commit.message}>{commit.message || 'No commit message'}</p>
+                          <p className="text-xs text-muted-foreground">
+                              {commit.sha.substring(0, 7)} by {commit.author || 'Unknown'} on {commit.date ? new Date(commit.date).toLocaleDateString() : '-'}
+                          </p>
+                       </div>
+                   </DropdownMenuItem>
+               ))}
+               {history?.length === 0 && <DropdownMenuItem disabled>No history found</DropdownMenuItem>} 
+               {!history && !isHistoryLoading && <DropdownMenuItem disabled>Could not load history</DropdownMenuItem>} 
             </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      {/* Show loader only while fetching specific version */}
-      {isVersionLoading ? (
-         <div>Loading version...</div> // Replace with spinner later
-      ) : (
-        <NoteEditor 
-          key={`${notePath}-${selectedCommitSha || 'latest'}`} // Force re-render on path or version change
-          initialContent={displayedContent} 
-          onSave={handleSaveNote} 
-          readOnly={isReadOnly} // Pass readOnly state
-        />
-      )}
+      <div className="flex-grow overflow-hidden">
+          {isVersionLoading ? (
+            <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground"/>
+                <span className="ml-2">Loading version...</span>
+            </div>
+          ) : initialLoadComplete ? (
+            <NoteEditor 
+              key={`${notePath}-${selectedCommitSha || 'latest'}`} 
+              initialContent={displayedContent} 
+              onSave={handleSaveNote} 
+              readOnly={isReadOnly} 
+            />
+          ) : (
+             <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground"/>
+                <span className="ml-2">Loading note...</span>
+            </div>
+          )}
+      </div>
     </div>
   );
 };

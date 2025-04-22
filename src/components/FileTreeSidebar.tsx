@@ -291,29 +291,9 @@ export function FileTreeSidebar() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <aside className="w-64 p-4 border-r">
-        <div className="flex items-center space-x-2">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Loading Tree...</span>
-        </div>
-      </aside>
-    );
-  }
-
-  if (error) {
-    return (
-        <aside className="w-64 p-4 border-r text-red-600">
-            <p>Error loading tree:</p>
-            <p className="text-sm">{error}</p>
-        </aside>
-    )
-  }
-
   return (
-    <aside className="w-64 p-4 border-r overflow-y-auto flex flex-col" style={{maxHeight: 'calc(100vh - 4rem)'}}>
-      <div className="flex justify-between items-center mb-1">
+    <div className="p-4 flex flex-col h-full w-full">
+      <div className="flex justify-between items-center mb-1 flex-shrink-0">
         <h2 className="text-lg font-semibold">Notes</h2>
         <div className="flex items-center">
           <Button 
@@ -333,21 +313,33 @@ export function FileTreeSidebar() {
           </Button>
         </div>
       </div>
-      <div className="text-xs text-muted-foreground mb-2 truncate px-1 py-0.5 rounded bg-muted" title={`Creation context: ${creationContextPath || '/'}`}>
+      <div className="text-xs text-muted-foreground mb-2 truncate px-1 py-0.5 rounded bg-muted flex-shrink-0" title={`Creation context: ${creationContextPath || '/'}`}>
          Create in: {creationContextPath ? `/${creationContextPath}` : '/'}
       </div>
-      <div className="flex-grow overflow-y-auto">
-        {tree.length > 0 ? (
-          tree.map(node => <TreeNode 
-              key={node.path} 
-              node={node} 
-              creationContextPath={creationContextPath} 
-              setCreationContextPath={setCreationContextPath}
-            />)
-        ) : (
-          <p className="text-sm text-muted-foreground italic">No notes found.</p>
-        )}
+      
+      <div className="flex-grow overflow-y-auto -mr-4 pr-4">
+          {isLoading ? (
+             <div className="flex items-center justify-center h-full">
+               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+             </div>
+          ) : error ? (
+             <div className="p-4 text-red-600">
+                 <p>Error loading tree:</p>
+                 <p className="text-sm">{error}</p>
+             </div>
+          ) : (
+              tree.length > 0 ? (
+                  tree.map(node => <TreeNode 
+                      key={node.path} 
+                      node={node} 
+                      creationContextPath={creationContextPath} 
+                      setCreationContextPath={setCreationContextPath}
+                    />)
+              ) : (
+                  <p className="text-sm text-muted-foreground italic p-4">No notes found.</p>
+              )
+          )}
       </div>
-    </aside>
+    </div>
   );
 } 
