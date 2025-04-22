@@ -11,7 +11,6 @@ type GithubRepoResponse = Endpoints["POST /user/repos"]["response"]["data"];
 type GithubCommitResponse = Endpoints["PUT /repos/{owner}/{repo}/contents/{path}"]["response"]["data"];
 type GithubTreeResponse = Endpoints["GET /repos/{owner}/{repo}/git/trees/{tree_sha}"]["response"]["data"];
 type GithubCommitHistoryResponse = Endpoints["GET /repos/{owner}/{repo}/commits"]["response"]["data"];
-type GithubGetContentResponse = Endpoints["GET /repos/{owner}/{repo}/contents/{path}"]["response"]["data"];
 
 // Define CommitHistoryEntry interface here
 interface CommitHistoryEntry {

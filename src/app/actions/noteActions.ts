@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { decrypt } from '@/lib/encryption.server';
-import { getGithubUser, commitFile, getRepoFileContent, getRepoTree, checkRepoExists, createGithubRepo, getCommitHistoryForFile, getFileContentAtCommit } from '@/lib/githubService.server'; // Added history functions
+import { getGithubUser, commitFile, getRepoFileContent, getRepoTree, getCommitHistoryForFile, getFileContentAtCommit } from '@/lib/githubService.server'; // Added history functions
 import { ensureUserRepo } from './repoActions'; // Import the correct ensureUserRepo
 // Import types if necessary (e.g., for Supabase data)
 
@@ -24,7 +24,7 @@ interface LoadNoteResult {
 interface TreeNode {
     path?: string;
     mode?: string;
-    type?: 'blob' | 'tree' | 'commit'; // Added commit for submodules if any
+    type?: string; // Changed from union type to string to match GitHub API response more broadly
     sha?: string;
     size?: number;
     url?: string;
@@ -34,13 +34,6 @@ interface GetTreeResult {
     success: boolean;
     tree?: TreeNode[];
     error?: string;
-}
-
-interface EnsureRepoResult {
-    success: boolean;
-    repoName?: string;
-    error?: string;
-    created?: boolean; // Flag to indicate if repo was newly created
 }
 
 // --- Interfaces for History Actions ---
@@ -141,7 +134,7 @@ export async function saveNote(
         const contentBase64 = Buffer.from(content, 'utf8').toString('base64');
 
         // 5. Call GitHub Service to Commit
-        const _commitResult = await commitFile(
+        await commitFile(
             decryptedToken,
             owner,
             repo,

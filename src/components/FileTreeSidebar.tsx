@@ -9,19 +9,19 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useRouter, useParams } from 'next/navigation';
 
-// Define types for tree structure (can be refined)
-interface TreeNodeData {
-  path: string;
-  name: string;
-  type: 'blob' | 'tree';
-  children?: TreeNodeData[];
-  sha?: string;
-}
+// Removed unused TreeNodeData interface
+// interface TreeNodeData {
+//   path: string;
+//   name: string;
+//   type: 'blob' | 'tree';
+//   children?: TreeNodeData[];
+//   sha?: string;
+// }
 
 interface GitHubTreeItem {
     path?: string;
     mode?: string;
-    type?: 'blob' | 'tree' | 'commit'; 
+    type?: string;
     sha?: string;
     size?: number;
     url?: string;

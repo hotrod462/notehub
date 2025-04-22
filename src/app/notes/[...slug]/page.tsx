@@ -162,17 +162,19 @@ const NotePage: React.FC = () => { // No props needed here now
   }, [params, latestContent]); // Depend on latestContent for fallback
   // --- End History Handlers ---
 
-  if (!params || !params.slug) {
-    return <div className="p-4">Loading note path...</div>;
-  }
-  
-  const slug = params.slug; 
-  const notePath = slug.join('/');
-
+  // --- Save Handlers ---
   const isReadOnly = selectedCommitSha !== null;
 
   // Wrap handlePromptSave in useCallback
   const handlePromptSave = useCallback(() => {
+      // Note: We need notePath here, but it might not be defined yet
+      // if params are not available initially. We'll handle this inside.
+      if (!params || !params.slug) {
+          toast.error("Cannot save: Note path is not available yet.");
+          return;
+      }
+      const notePath = params.slug.join('/');
+
       if (isReadOnly) {
           toast.error("Cannot save while viewing history.");
           return;
@@ -185,9 +187,18 @@ const NotePage: React.FC = () => { // No props needed here now
       const defaultMessage = `Update ${notePath}`;
       setCommitMessage(defaultMessage);
       setIsCommitDialogOpen(true);
-  }, [isReadOnly, notePath]); // Add dependencies
+  }, [isReadOnly, params, editorRef, setCommitMessage, setIsCommitDialogOpen]); // Add dependencies
 
   const handleConfirmSave = async () => {
+      // Note: We need notePath here too.
+      if (!params || !params.slug) {
+          console.error("Cannot save: Note path is not available.");
+          toast.error("Cannot save: Note path is not available.");
+          setIsCommitDialogOpen(false);
+          return;
+      }
+      const notePath = params.slug.join('/');
+
       const contentToSave = editorRef.current?.getMarkdown(); 
       if (contentToSave === undefined || contentToSave === null) {
           console.error("Could not get editor content to save.");
@@ -198,19 +209,21 @@ const NotePage: React.FC = () => { // No props needed here now
 
       if (!commitMessage.trim()) {
         toast.warning("Commit message cannot be empty.");
-        return;
+        return; // Keep dialog open
       }
 
       console.log(`Saving note: ${notePath} with message: "${commitMessage}"`);
       setIsCommitDialogOpen(false);
 
       try {
+        // Make sure saveNote has access to notePath
         const result = await saveNote(notePath, contentToSave, commitMessage); 
         
         if (result.success) {
           toast.success("Note saved successfully!");
-          setLatestContent(contentToSave); 
-          setHistory(null); 
+          setLatestContent(contentToSave); // Update latest content on successful save
+          setHistory(null); // Invalidate history cache after save
+          // No need to reset selectedCommitSha, saving always goes to latest
         } else {
           toast.error(`Failed to save: ${result.error || 'Unknown error'}`);
         }
@@ -219,19 +232,23 @@ const NotePage: React.FC = () => { // No props needed here now
         const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred while trying to save.";
         toast.error(errorMessage);
       } finally {
-          setCommitMessage('');
+          setCommitMessage(''); // Clear message only after attempting save
       }
   };
 
+  // --- Keybindings ---
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === 's') {
         event.preventDefault();
         console.log("Ctrl+S detected");
-        if (!isReadOnly && initialLoadComplete) {
-            handlePromptSave();
-        } else {
-             toast.info("Cannot save while loading or viewing history.");
+        // Check initialLoadComplete and !isReadOnly before calling handlePromptSave
+        if (initialLoadComplete && !isReadOnly) {
+            handlePromptSave(); // Use the memoized callback
+        } else if (!initialLoadComplete) {
+             toast.info("Cannot save while the note is loading.");
+        } else if (isReadOnly) {
+             toast.info("Cannot save while viewing history.");
         }
       }
     };
@@ -240,7 +257,19 @@ const NotePage: React.FC = () => { // No props needed here now
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isReadOnly, initialLoadComplete, handlePromptSave]);
+    // Dependencies: handlePromptSave callback, initialLoadComplete, isReadOnly state
+  }, [handlePromptSave, initialLoadComplete, isReadOnly]); 
+  // --- End Keybindings ---
+
+  // Early return if params are not yet available
+  if (!params || !params.slug) {
+    // Keep this minimal, hooks must be called before this
+    return <div className="p-4">Loading note path...</div>;
+  }
+  
+  // Params are available, derive notePath
+  const slug = params.slug; 
+  const notePath = slug.join('/');
 
   return (
     <div className="p-4 flex flex-col h-full">
@@ -349,7 +378,7 @@ const NotePage: React.FC = () => { // No props needed here now
               <Button 
                  type="button"
                  onClick={handleConfirmSave} 
-                 disabled={!commitMessage.trim()}
+                 disabled={!commitMessage.trim()} // Disable if message is empty
                >
                  Save Changes
               </Button>
