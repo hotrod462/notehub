@@ -6,6 +6,7 @@ import { decrypt } from '@/lib/encryption.server';
 import { getGithubUser, commitFile, getRepoFileContent, getRepoTree, getCommitHistoryForFile, getFileContentAtCommit } from '@/lib/githubService.server'; // Added history functions
 import { ensureUserRepo } from './repoActions'; // Import the correct ensureUserRepo
 import { posthog } from '@/lib/posthog'; // Import shared PostHog client
+import { shutdownPostHog } from '@/lib/posthog'; // Import shutdownPostHog
 // Import types if necessary (e.g., for Supabase data)
 
 interface SaveNoteResult {
@@ -161,6 +162,8 @@ export async function saveNote(
             }
           });
           console.log("[PostHog Debug] Capture call finished for 'note_saved'.");
+          // Explicitly shutdown to ensure flush in serverless env
+          await shutdownPostHog(); 
         }
         // --- End PostHog Event ---
 
@@ -249,6 +252,8 @@ export async function createNote(filePath: string, initialContent: string = ''):
             }
           });
           console.log("[PostHog Debug] Capture call finished for 'note_created'.");
+          // Explicitly shutdown to ensure flush in serverless env
+          await shutdownPostHog(); 
         }
         // --- End PostHog Event ---
 

@@ -110,7 +110,8 @@ export async function GET(request: NextRequest) {
             });
             console.log("[PostHog Debug] Capture call finished for 'user_signed_in'.");
             // Make sure events are sent before the function potentially exits
-            // await posthog.shutdownAsync(); // Consider if shutdown is needed based on env (Vercel etc.) - potentially causes delays
+            // Explicitly shutdown to ensure flush in serverless env
+            await shutdownPostHog(); 
 
             // --- End PostHog Event ---
 
