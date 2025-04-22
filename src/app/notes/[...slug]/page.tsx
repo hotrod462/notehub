@@ -23,7 +23,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogClose, // Import DialogClose
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -75,10 +74,11 @@ const NotePage: React.FC = () => { // No props needed here now
                     toast.error(`Failed to load note: ${result.error || 'Unknown error'}`);
                 }
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Client-side error calling loadNote action:", error);
             if (isMounted) {
-                toast.error("An unexpected error occurred while loading the note.");
+                const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred while loading the note.";
+                toast.error(errorMessage);
             }
         } finally {
             if (isMounted) {
@@ -113,8 +113,9 @@ const NotePage: React.FC = () => { // No props needed here now
             toast.error(`Failed to load history: ${result.error || 'Unknown error'}`);
             setHistory(null); // Clear history on error
         }
-    } catch (error: any) {
-        toast.error("An error occurred while fetching history.");
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : "An error occurred while fetching history.";
+        toast.error(errorMessage);
         console.error("Error fetching history:", error);
         setHistory(null);
     } finally {
@@ -149,8 +150,9 @@ const NotePage: React.FC = () => { // No props needed here now
             setDisplayedContent(latestContent); // Fallback to latest on error?
             setSelectedCommitSha(null);
         }
-    } catch (error: any) {
-        toast.error("An error occurred while loading version.");
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : "An error occurred while loading version.";
+        toast.error(errorMessage);
         console.error("Error loading version:", error);
         setDisplayedContent(latestContent); // Fallback
         setSelectedCommitSha(null);
@@ -167,7 +169,10 @@ const NotePage: React.FC = () => { // No props needed here now
   const slug = params.slug; 
   const notePath = slug.join('/');
 
-  const handlePromptSave = () => {
+  const isReadOnly = selectedCommitSha !== null;
+
+  // Wrap handlePromptSave in useCallback
+  const handlePromptSave = useCallback(() => {
       if (isReadOnly) {
           toast.error("Cannot save while viewing history.");
           return;
@@ -180,7 +185,7 @@ const NotePage: React.FC = () => { // No props needed here now
       const defaultMessage = `Update ${notePath}`;
       setCommitMessage(defaultMessage);
       setIsCommitDialogOpen(true);
-  };
+  }, [isReadOnly, notePath]); // Add dependencies
 
   const handleConfirmSave = async () => {
       const contentToSave = editorRef.current?.getMarkdown(); 
@@ -209,15 +214,14 @@ const NotePage: React.FC = () => { // No props needed here now
         } else {
           toast.error(`Failed to save: ${result.error || 'Unknown error'}`);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Client-side error calling saveNote action:", error);
-        toast.error("An unexpected error occurred while trying to save.");
+        const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred while trying to save.";
+        toast.error(errorMessage);
       } finally {
           setCommitMessage('');
       }
   };
-
-  const isReadOnly = selectedCommitSha !== null;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

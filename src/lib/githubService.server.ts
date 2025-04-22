@@ -1,14 +1,31 @@
 import { Octokit } from "@octokit/rest"; // Using Octokit for easier API interaction
+import { Endpoints } from "@octokit/types"; // Import Octokit endpoint types
 
 // Initialize Octokit without auth initially, token will be provided per request
 // const octokit = new Octokit(); 
 // Using Octokit requires installation: npm install @octokit/rest
 
+// Define more specific types based on Octokit documentation
+type GithubUserResponse = Endpoints["GET /user"]["response"]["data"];
+type GithubRepoResponse = Endpoints["POST /user/repos"]["response"]["data"];
+type GithubCommitResponse = Endpoints["PUT /repos/{owner}/{repo}/contents/{path}"]["response"]["data"];
+type GithubTreeResponse = Endpoints["GET /repos/{owner}/{repo}/git/trees/{tree_sha}"]["response"]["data"];
+type GithubCommitHistoryResponse = Endpoints["GET /repos/{owner}/{repo}/commits"]["response"]["data"];
+type GithubGetContentResponse = Endpoints["GET /repos/{owner}/{repo}/contents/{path}"]["response"]["data"];
+
+// Define CommitHistoryEntry interface here
+interface CommitHistoryEntry {
+    sha: string;
+    message?: string;
+    author?: string;
+    date?: string;
+}
+
 /**
  * Fetches the authenticated user's GitHub profile information.
  * Requires the user's decrypted GitHub access token.
  */
-export async function getGithubUser(token: string): Promise<any> { // Replace 'any' with a specific type later
+export async function getGithubUser(token: string): Promise<GithubUserResponse> {
   if (!token) {
     throw new Error("GitHub token is required.");
   }
@@ -20,7 +37,7 @@ export async function getGithubUser(token: string): Promise<any> { // Replace 'a
     const { data: user } = await octokit.rest.users.getAuthenticated();
     console.log("Fetched GitHub user:", user.login);
     return user;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error fetching GitHub user:", error);
     // Consider more specific error handling or re-throwing
     throw new Error("Could not fetch GitHub user information.");
@@ -39,12 +56,14 @@ export async function checkRepoExists(token: string, owner: string, repo: string
   try {
     await octokit.rest.repos.get({ owner, repo });
     return true; // Repository exists
-  } catch (error: any) {
-    if (error.status === 404) {
+  } catch (error: unknown) {
+    // Check if error is an object with status property
+    if (typeof error === 'object' && error !== null && 'status' in error && error.status === 404) {
       return false; // Repository does not exist
     }
-    console.error(`Error checking repo ${owner}/${repo}:`, error);
-    throw new Error(`Could not check repository existence.`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Error checking repo ${owner}/${repo}:`, errorMessage);
+    throw new Error(`Could not check repository existence: ${errorMessage}`);
   }
 }
 
@@ -52,7 +71,7 @@ export async function checkRepoExists(token: string, owner: string, repo: string
  * Creates a new private repository for the user.
  * Requires the user's decrypted GitHub access token.
  */
-export async function createGithubRepo(token: string, repoName: string): Promise<any> {
+export async function createGithubRepo(token: string, repoName: string): Promise<GithubRepoResponse> {
    if (!token || !repoName) {
     throw new Error("GitHub token and repo name are required.");
   }
@@ -66,9 +85,10 @@ export async function createGithubRepo(token: string, repoName: string): Promise
     });
     console.log(`Created GitHub repo: ${repo.full_name}`);
     return repo;
-  } catch (error) {
-    console.error(`Error creating GitHub repo ${repoName}:`, error);
-    throw new Error(`Could not create GitHub repository.`);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Error creating GitHub repo ${repoName}:`, errorMessage);
+    throw new Error(`Could not create GitHub repository: ${errorMessage}`);
   }
 }
 
@@ -85,10 +105,10 @@ async function getFileSha(octokit: Octokit, owner: string, repo: string, path: s
       return data.sha;
     }
     // Handle case where path exists but is a directory (shouldn't happen for notes ideally)
-    console.warn(`Path ${path} in ${owner}/${repo} exists but is not a file.`);
+    console.warn(`Path ${path} in ${owner}/${repo} exists but is not a file or doesn't have SHA.`);
     return undefined; 
-  } catch (error: any) {
-    if (error.status === 404) {
+  } catch (error: unknown) {
+    if (typeof error === 'object' && error !== null && 'status' in error && error.status === 404) {
       return undefined; // File doesn't exist, valid case for new file creation
     }
     console.error(`Error getting SHA for ${owner}/${repo}/${path}:`, error);
@@ -117,20 +137,21 @@ export async function getRepoFileContent(token: string, owner: string, repo: str
       const decodedContent = Buffer.from(data.content, 'base64').toString('utf8');
       return decodedContent;
     } else if (Array.isArray(data)) {
-         console.warn(`Path resolved to a directory, not a file: ${owner}/${repo}/${path}`);
+         console.warn(`Path resolved to a directory: ${owner}/${repo}/${path}`);
          return null; // Path is a directory
     } else {
-        console.warn(`Unexpected response format for ${owner}/${repo}/${path}:`, data);
+        console.warn(`Unexpected response format or missing content for ${owner}/${repo}/${path}`);
          return null; // Unexpected format or missing content
     }
 
-  } catch (error: any) {
-    if (error.status === 404) {
+  } catch (error: unknown) {
+    if (typeof error === 'object' && error !== null && 'status' in error && error.status === 404) {
       console.log(`File not found: ${owner}/${repo}/${path}`);
       return null; // File doesn't exist is a valid outcome
     }
-    console.error(`Error getting content for ${owner}/${repo}/${path}:`, error);
-    throw new Error(`Could not get file content from GitHub.`); // Re-throw other errors
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Error getting content for ${owner}/${repo}/${path}:`, errorMessage);
+    throw new Error(`Could not get file content from GitHub: ${errorMessage}`); // Re-throw other errors
   }
 }
 
@@ -141,7 +162,7 @@ export async function commitFile(
   path: string,
   contentBase64: string, // Expecting base64 encoded content
   message: string
-): Promise<any> { // Replace 'any' with specific Octokit response type later
+): Promise<GithubCommitResponse> {
   // Allow empty string for contentBase64 (for creating empty files)
   if (!token || !owner || !repo || !path || contentBase64 === null || contentBase64 === undefined || !message) {
     throw new Error("Missing required parameters for commitFile (token, owner, repo, path, message are required; content can be empty string).");
@@ -166,15 +187,16 @@ export async function commitFile(
     });
     console.log(`Commit successful for ${path}. New SHA: ${commitData.content?.sha}`);
     return commitData;
-  } catch (error) {
-    console.error(`Error committing file ${owner}/${repo}/${path}:`, error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Error committing file ${owner}/${repo}/${path}:`, errorMessage);
     // Consider providing more context or specific error types
-    throw new Error(`Could not commit file to GitHub.`); 
+    throw new Error(`Could not commit file to GitHub: ${errorMessage}`); 
   }
 }
 
 // --- Updated getRepoTree function --- 
-export async function getRepoTree(token: string, owner: string, repo: string, tree_sha: string = 'main'): Promise<any[]> { // Replace any[] later
+export async function getRepoTree(token: string, owner: string, repo: string, tree_sha: string = 'main'): Promise<GithubTreeResponse['tree']> {
     if (!token || !owner || !repo || !tree_sha) {
         throw new Error("Missing required parameters for getRepoTree.");
     }
@@ -199,16 +221,26 @@ export async function getRepoTree(token: string, owner: string, repo: string, tr
         const filteredTree = data.tree?.filter(item => 
             (item.type === 'blob' || item.type === 'tree') && 
             item.path && 
-            !item.path.startsWith('.') 
-            // TODO: Add more sophisticated filtering if needed (e.g., ignore specific folders)
+            !item.path.startsWith('.') &&
+            // Ensure we don't include the .gitkeep files used for empty folders
+            !item.path.endsWith('.gitkeep') 
         ) || []; // Handle case where data.tree might be undefined
 
-        return filteredTree;
+        // Assert the type after filtering to satisfy the stricter return type
+        return filteredTree as { 
+            path: string; 
+            mode: string; 
+            type: string; 
+            sha: string; 
+            size?: number; 
+            url?: string; 
+        }[];
 
-    } catch (error: any) {
-        console.error(`Error getting tree for ${owner}/${repo}/${tree_sha}:`, error);
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`Error getting tree for ${owner}/${repo}/${tree_sha}:`, errorMessage);
         // Re-throw error to be handled by the calling server action
-        throw error;
+        throw new Error(`Could not get repo tree: ${errorMessage}`);
     }
 }
 
@@ -218,7 +250,7 @@ export async function getRepoTree(token: string, owner: string, repo: string, tr
  * Fetches the commit history for a specific file path.
  * Requires the user's decrypted GitHub access token.
  */
-export async function getCommitHistoryForFile(token: string, owner: string, repo: string, path: string): Promise<any[]> { // Replace any[] with a specific type later
+export async function getCommitHistoryForFile(token: string, owner: string, repo: string, path: string): Promise<CommitHistoryEntry[]> {
   if (!token || !owner || !repo || !path) {
     throw new Error("Missing required parameters for getCommitHistoryForFile.");
   }
@@ -236,16 +268,17 @@ export async function getCommitHistoryForFile(token: string, owner: string, repo
     console.log(`Fetched ${commits.length} commits for path: ${owner}/${repo}/${path}`);
     // Return relevant data (e.g., sha, commit message, author, date)
     // Map to a cleaner structure if desired
-    return commits.map(c => ({
+    return commits.map((c: GithubCommitHistoryResponse[number]) => ({
         sha: c.sha,
         message: c.commit.message,
         author: c.commit.author?.name,
         date: c.commit.author?.date,
     }));
-  } catch (error: any) {
-    console.error(`Error fetching commit history for ${owner}/${repo}/${path}:`, error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Error fetching commit history for ${owner}/${repo}/${path}:`, errorMessage);
     // Handle 404 for path not found? The API might just return empty list.
-    throw new Error(`Could not fetch commit history from GitHub.`);
+    throw new Error(`Could not fetch commit history from GitHub: ${errorMessage}`);
   }
 }
 
@@ -277,12 +310,13 @@ export async function getFileContentAtCommit(token: string, owner: string, repo:
       return null; // Path is a directory or unexpected format at this commit
     }
 
-  } catch (error: any) {
-    if (error.status === 404) {
+  } catch (error: unknown) {
+    if (typeof error === 'object' && error !== null && 'status' in error && error.status === 404) {
       console.log(`File not found at commit ${commitSha}: ${owner}/${repo}/${path}`);
       return null; // File didn't exist at this commit
     }
-    console.error(`Error getting content for ${owner}/${repo}/${path} at commit ${commitSha}:`, error);
-    throw new Error(`Could not get file content at commit from GitHub.`); // Re-throw other errors
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Error getting content for ${owner}/${repo}/${path} at commit ${commitSha}:`, errorMessage);
+    throw new Error(`Could not get file content at commit from GitHub: ${errorMessage}`); // Re-throw other errors
   }
 } 

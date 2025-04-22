@@ -141,12 +141,12 @@ export async function saveNote(
         const contentBase64 = Buffer.from(content, 'utf8').toString('base64');
 
         // 5. Call GitHub Service to Commit
-        const commitResult = await commitFile(
+        const _commitResult = await commitFile(
             decryptedToken,
             owner,
             repo,
-            notePath, 
-            contentBase64, 
+            notePath,
+            contentBase64,
             finalCommitMessage // Pass the final commit message
             // Need to ensure commitFile correctly handles getting file SHA for updates
         );
@@ -156,9 +156,10 @@ export async function saveNote(
         console.log(`Successfully committed changes to ${owner}/${repo}/${notePath} with message: "${finalCommitMessage}"`);
         return { success: true };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error(`Error saving note ${notePath} to GitHub:`, error);
-        return { success: false, error: error.message || 'Failed to save note to GitHub.' };
+        const errorMessage = error instanceof Error ? error.message : 'Failed to save note to GitHub.';
+        return { success: false, error: errorMessage };
     }
 }
 
@@ -227,13 +228,16 @@ export async function createNote(filePath: string, initialContent: string = ''):
         console.log(`Successfully created note ${owner}/${repo}/${filePath}`);
         return { success: true, filePath };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error(`Error creating note ${filePath} on GitHub:`, error);
         // Check for specific errors, e.g., file already exists (though commitFile might handle it)
-        if (error.message?.includes('exists')) { // Basic check, improve if needed
-            return { success: false, error: `File already exists at path: ${filePath}` };
+        let errorMessage = 'Failed to create note on GitHub.';
+        if (error instanceof Error && error.message?.includes('exists')) { // Basic check, improve if needed
+            errorMessage = `File already exists at path: ${filePath}`;
+        } else if (error instanceof Error) {
+            errorMessage = error.message;
         }
-        return { success: false, error: error.message || 'Failed to create note on GitHub.' };
+        return { success: false, error: errorMessage };
     }
 }
 
@@ -305,13 +309,10 @@ export async function createFolder(folderPath: string): Promise<CreateFolderResu
         console.log(`Successfully created folder ${folderPath} (via ${gitkeepPath}) in ${owner}/${repo}`);
         return { success: true, folderPath };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error(`Error creating folder ${folderPath} (via ${gitkeepPath}) on GitHub:`, error);
-        // Check for specific errors, e.g., file already exists
-        if (error.message?.includes('exists')) { 
-            return { success: false, error: `File/Folder already exists at path: ${folderPath}` };
-        }
-        return { success: false, error: error.message || 'Failed to create folder on GitHub.' };
+        const errorMessage = error instanceof Error ? error.message : 'Failed to create folder on GitHub.';
+        return { success: false, error: errorMessage };
     }
 }
 
@@ -362,28 +363,23 @@ export async function loadNote(notePath: string): Promise<LoadNoteResult> {
         const owner = githubUser.login;
         const repo = profile.github_repo_name;
 
-        // 4. Call GitHub Service to Get File Content
-        // The getRepoFileContent function needs full implementation
-        const fileContent = await getRepoFileContent(
-            decryptedToken,
-            owner,
-            repo,
-            notePath // The path within the repo
-        );
+        // 4. Call GitHub Service to get file content
+        const fileContent = await getRepoFileContent(decryptedToken, owner, repo, notePath);
 
         if (fileContent === null) {
-            console.log(`Note not found on GitHub: ${owner}/${repo}/${notePath}`);
-            // Return success, but indicate content is null (new note)
-            return { success: true, content: null };
-        } else {
-            console.log(`Successfully loaded content for ${owner}/${repo}/${notePath}`);
-            // NOTE: Content is expected to be HTML for now, will change later
-            return { success: true, content: fileContent };
+            // File doesn't exist or other issue fetching content
+            console.log(`Note not found or empty: ${owner}/${repo}/${notePath}`);
+            return { success: true, content: null }; // Indicate not found/empty
         }
 
-    } catch (error: any) {
+        // Assuming getRepoFileContent returns the raw content string
+        console.log(`Successfully loaded content for ${owner}/${repo}/${notePath}`);
+        return { success: true, content: fileContent };
+
+    } catch (error: unknown) {
         console.error(`Error loading note ${notePath} from GitHub:`, error);
-        return { success: false, error: error.message || 'Failed to load note from GitHub.' };
+        const errorMessage = error instanceof Error ? error.message : 'Failed to load note from GitHub.';
+        return { success: false, error: errorMessage };
     }
 }
 
@@ -435,20 +431,21 @@ export async function getNoteTree(): Promise<GetTreeResult> {
 
         // 5. Call GitHub Service to get tree
         // The getRepoTree function needs full implementation
-        const treeData = await getRepoTree(
-            decryptedToken,
-            owner,
-            repoName, // Use the confirmed repo name
-            // Optionally pass branch name/SHA if needed, default is likely main/master
-        );
+        const tree = await getRepoTree(decryptedToken, owner, repoName, 'main'); // Assuming main branch
 
-        // TODO: Process treeData into the format expected by the frontend
-        console.log(`Fetched tree data for ${owner}/${repoName}`);
-        return { success: true, tree: treeData };
+        if (!tree) {
+            // Handle case where tree couldn't be fetched
+            console.log(`Could not fetch tree for ${owner}/${repoName}`);
+            return { success: false, error: 'Could not fetch repository tree.' };
+        }
 
-    } catch (error: any) {
+        console.log(`Successfully fetched tree for ${owner}/${repoName}`);
+        return { success: true, tree: tree }; // Return the fetched tree data
+
+    } catch (error: unknown) {
         console.error(`Error getting note tree from GitHub for user ${user.id}:`, error);
-        return { success: false, error: error.message || 'Failed to get note tree from GitHub.' };
+        const errorMessage = error instanceof Error ? error.message : 'Failed to get note tree from GitHub.';
+        return { success: false, error: errorMessage };
     }
 }
 
@@ -493,20 +490,21 @@ export async function getNoteHistory(notePath: string): Promise<GetHistoryResult
         const repo = profile.github_repo_name;
 
         // 4. Call GitHub Service to Get History
-        const historyData = await getCommitHistoryForFile(
-            decryptedToken,
-            owner,
-            repo,
-            notePath
-        );
+        const history = await getCommitHistoryForFile(decryptedToken, owner, repo, notePath);
+
+        if (!history) {
+            // Handle case where history couldn't be fetched
+            console.log(`Could not fetch history for ${owner}/${repo}/${notePath}`);
+            return { success: false, error: 'Could not fetch commit history.' };
+        }
 
         console.log(`Successfully fetched history for ${owner}/${repo}/${notePath}`);
-        return { success: true, history: historyData };
+        return { success: true, history: history };
 
-    } catch (error: any) {
-        console.error(`Error fetching history for ${profile.github_repo_name}/${notePath}:`, error);
-        // Consider more specific error handling (e.g., distinguishing 404?)
-        return { success: false, error: error.message || 'Failed to fetch note history.' };
+    } catch (error: unknown) {
+        console.error(`Error getting note history from GitHub for ${notePath}:`, error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to get note history from GitHub.';
+        return { success: false, error: errorMessage };
     }
 }
 
@@ -549,26 +547,21 @@ export async function getNoteVersion(notePath: string, commitSha: string): Promi
         const repo = profile.github_repo_name;
 
         // 4. Call GitHub Service to Get File Content at Commit
-        const fileContent = await getFileContentAtCommit(
-            decryptedToken,
-            owner,
-            repo,
-            notePath,
-            commitSha
-        );
+        const fileContent = await getFileContentAtCommit(decryptedToken, owner, repo, notePath, commitSha);
 
         if (fileContent === null) {
-            console.log(`Note not found at commit ${commitSha}: ${owner}/${repo}/${notePath}`);
-            // Return success, but indicate content is null (didn't exist or was dir)
-            return { success: true, content: null };
-        } else {
-            console.log(`Successfully loaded content for ${owner}/${repo}/${notePath} at ${commitSha}`);
-            return { success: true, content: fileContent };
+            console.log(`Content not found for ${owner}/${repo}/${notePath} at commit ${commitSha}`);
+            return { success: true, content: null }; 
         }
 
-    } catch (error: any) {
-        console.error(`Error loading note version ${commitSha} for ${profile.github_repo_name}/${notePath}:`, error);
-        return { success: false, error: error.message || 'Failed to load note version.' };
+        // Assuming getFileContentAtCommit returns the raw content string
+        console.log(`Successfully loaded content for ${owner}/${repo}/${notePath} at commit ${commitSha}`);
+        return { success: true, content: fileContent };
+
+    } catch (error: unknown) {
+        console.error(`Error loading note version from GitHub (${notePath} @ ${commitSha}):`, error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to load note version from GitHub.';
+        return { success: false, error: errorMessage };
     }
 }
 

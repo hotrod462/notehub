@@ -34,25 +34,32 @@ async function checkAndCreateRepoIfNeeded(
       revalidatePath('/notes');
       return { repoExisted: true, repoName: DRAFTER_REPO_NAME };
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error ensuring repository:', error);
-    return { repoExisted: false, repoName: '', error: error.message || 'Failed to ensure GitHub repository.' };
+    const errorMessage = error instanceof Error ? error.message : 'Failed to ensure GitHub repository.';
+    return { repoExisted: false, repoName: '', error: errorMessage };
   }
 }
 
 export async function ensureUserRepo(): Promise<{ success: boolean; repoName?: string; error?: string }> {
-  const cookieStore = await cookies();
+  const cookieStore = cookies();
 
-  // 1. Get user session
+  // Create Supabase client using the server pattern from @supabase/ssr
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: (name, value, options) => cookieStore.set({ name, value, ...options }),
-        remove: (name, options) => cookieStore.set({ name, value: '', ...options, maxAge: 0 }),
-      },
+        async get(name: string) {
+          return (await cookieStore).get(name)?.value
+        },
+        async set(name: string, value: string, options: CookieOptions) {
+          (await cookieStore).set({ name, value, ...options })
+        },
+        async remove(name: string, options: CookieOptions) {
+          (await cookieStore).set({ name, value: '', ...options })
+        }
+      }
     }
   );
 
@@ -116,8 +123,9 @@ export async function ensureUserRepo(): Promise<{ success: boolean; repoName?: s
     console.log(`Successfully ensured repo ${repoCheckResult.repoName} for user ${user.id}`);
     return { success: true, repoName: repoCheckResult.repoName };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error during GitHub user fetch or repo ensure process:', error);
-    return { success: false, error: error.message || 'An unexpected error occurred.' };
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, error: errorMessage };
   }
 } 

@@ -4,7 +4,7 @@ import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown } from 'tiptap-markdown';
 import Link from '@tiptap/extension-link';
-import React, { useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import React, { useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Button } from '@/components/ui/button';
 import { Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Code, Quote, LinkIcon } from 'lucide-react';
 import { Toggle } from "@/components/ui/toggle";
@@ -21,20 +21,17 @@ export interface NoteEditorRef {
 }
 
 const EditorToolbar = ({ editor }: { editor: Editor | null }) => {
-  if (!editor) {
-    return null;
-  }
-
-  const toggleBold = useCallback(() => editor.chain().focus().toggleBold().run(), [editor]);
-  const toggleItalic = useCallback(() => editor.chain().focus().toggleItalic().run(), [editor]);
-  const toggleH1 = useCallback(() => editor.chain().focus().toggleHeading({ level: 1 }).run(), [editor]);
-  const toggleH2 = useCallback(() => editor.chain().focus().toggleHeading({ level: 2 }).run(), [editor]);
-  const toggleH3 = useCallback(() => editor.chain().focus().toggleHeading({ level: 3 }).run(), [editor]);
-  const toggleBulletList = useCallback(() => editor.chain().focus().toggleBulletList().run(), [editor]);
-  const toggleOrderedList = useCallback(() => editor.chain().focus().toggleOrderedList().run(), [editor]);
-  const toggleCodeBlock = useCallback(() => editor.chain().focus().toggleCodeBlock().run(), [editor]);
-  const toggleBlockquote = useCallback(() => editor.chain().focus().toggleBlockquote().run(), [editor]);
+  const toggleBold = useCallback(() => editor?.chain().focus().toggleBold().run(), [editor]);
+  const toggleItalic = useCallback(() => editor?.chain().focus().toggleItalic().run(), [editor]);
+  const toggleH1 = useCallback(() => editor?.chain().focus().toggleHeading({ level: 1 }).run(), [editor]);
+  const toggleH2 = useCallback(() => editor?.chain().focus().toggleHeading({ level: 2 }).run(), [editor]);
+  const toggleH3 = useCallback(() => editor?.chain().focus().toggleHeading({ level: 3 }).run(), [editor]);
+  const toggleBulletList = useCallback(() => editor?.chain().focus().toggleBulletList().run(), [editor]);
+  const toggleOrderedList = useCallback(() => editor?.chain().focus().toggleOrderedList().run(), [editor]);
+  const toggleCodeBlock = useCallback(() => editor?.chain().focus().toggleCodeBlock().run(), [editor]);
+  const toggleBlockquote = useCallback(() => editor?.chain().focus().toggleBlockquote().run(), [editor]);
   const setLink = useCallback(() => {
+    if (!editor) return;
     const previousUrl = editor.getAttributes('link').href;
     if (previousUrl) {
       editor.chain().focus().extendMarkRange('link').unsetLink().run();
@@ -45,6 +42,10 @@ const EditorToolbar = ({ editor }: { editor: Editor | null }) => {
       editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
     }
   }, [editor]);
+
+  if (!editor) {
+    return null;
+  }
 
   return (
     <div className="border rounded-md p-1 mb-2 flex items-center space-x-1 flex-wrap">

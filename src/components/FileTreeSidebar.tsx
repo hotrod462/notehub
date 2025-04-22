@@ -200,9 +200,9 @@ export function FileTreeSidebar() {
               setError(errorMsg);
               toast.error(errorMsg);
           }
-      } catch (err: any) {
+      } catch (err: unknown) {
           console.error("Error fetching file tree:", err);
-          const errorMessage = err.message || "An unexpected error occurred.";
+          const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred.";
           setError(errorMessage);
           toast.error(`Error loading tree: ${errorMessage}`);
       } finally {
@@ -255,9 +255,10 @@ export function FileTreeSidebar() {
         } else {
             toast.error(`Failed to create file: ${result.error}`, { id: creationToast });
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Error calling createNote action:", error);
-        toast.error(`An unexpected error occurred: ${error.message}`, { id: creationToast });
+        const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
+        toast.error(`An unexpected error occurred: ${errorMessage}`, { id: creationToast });
     }
 
   };
@@ -293,9 +294,10 @@ export function FileTreeSidebar() {
         } else {
             toast.error(`Failed to create folder: ${result.error}`, { id: creationToast });
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Error calling createFolder action:", error);
-        toast.error(`An unexpected error occurred: ${error.message}`, { id: creationToast });
+        const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
+        toast.error(`An unexpected error occurred: ${errorMessage}`, { id: creationToast });
     }
   };
 

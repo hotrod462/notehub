@@ -9,6 +9,7 @@ import { signInWithGithub, signOut } from "@/app/auth/actions";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "next-themes";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import Link from 'next/link';
 // import { Link } from "react-router-dom";
 // import { Package2 } from "lucide-react";
 // import { FileTreeSidebar } from "@/components/FileTreeSidebar";
@@ -65,11 +66,11 @@ async function AppHeader() {
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 max-w-screen-2xl items-center">
         <div className="mr-4 hidden md:flex">
-          <a href="/" className="mr-6 flex items-center space-x-2">
+          <Link href="/" className="mr-6 flex items-center space-x-2">
             <span className="hidden font-bold sm:inline-block">
               Drafter
             </span>
-          </a>
+          </Link>
         </div>
         <div className="flex flex-1 items-center justify-end space-x-2">
           <ThemeToggle />
