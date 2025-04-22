@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { decrypt } from '@/lib/encryption.server';
 import { getGithubUser, commitFile, getRepoFileContent, getRepoTree, checkRepoExists, createGithubRepo, getCommitHistoryForFile, getFileContentAtCommit } from '@/lib/githubService.server'; // Added history functions
+import { ensureUserRepo } from './repoActions'; // Import the correct ensureUserRepo
 // Import types if necessary (e.g., for Supabase data)
 
 interface SaveNoteResult {
@@ -386,94 +387,6 @@ export async function loadNote(notePath: string): Promise<LoadNoteResult> {
     }
 }
 
-// Added ensureUserRepo server action
-export async function ensureUserRepo(): Promise<EnsureRepoResult> {
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        { cookies: { get: (name) => cookieStore.get(name)?.value } }
-    );
-
-    // 1. Get User & Profile
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-        return { success: false, error: 'User not authenticated.' };
-    }
-
-    const { data: profile, error: profileError } = await supabase
-        .from('users')
-        .select('github_repo_name, github_token_encrypted')
-        .eq('id', user.id)
-        .single();
-
-    if (profileError) { // Note: !profile is okay if repo name is null
-        return { success: false, error: 'Could not fetch user profile.' };
-    }
-    
-    // If repo name exists in profile, assume it's okay for now. 
-    // TODO: Optionally add verification step using checkRepoExists
-    if (profile?.github_repo_name) {
-        console.log(`User ${user.id} already has repo configured: ${profile.github_repo_name}`);
-        return { success: true, repoName: profile.github_repo_name, created: false };
-    }
-
-    // Repo name not set, proceed to create/verify
-    console.log(`Repo name not set for user ${user.id}. Ensuring repository exists...`);
-
-    if (!profile?.github_token_encrypted) {
-        return { success: false, error: 'Encrypted GitHub token not found. Cannot create repo.' };
-    }
-
-    // 2. Decrypt Token
-    const decryptedToken = decrypt(profile.github_token_encrypted);
-    if (!decryptedToken) {
-        return { success: false, error: 'Failed to decrypt GitHub token.' };
-    }
-
-    try {
-        // 3. Get GitHub Username & Determine Repo Name
-        const githubUser = await getGithubUser(decryptedToken);
-        const owner = githubUser.login;
-        // Define a standard repo name format
-        const repoName = `notehub-notes-${owner}`; 
-        let repoExisted = false;
-        let repoWasCreated = false;
-
-        console.log(`Checking for repository: ${owner}/${repoName}`);
-        repoExisted = await checkRepoExists(decryptedToken, owner, repoName);
-
-        if (!repoExisted) {
-            console.log(`Repository ${owner}/${repoName} not found. Creating...`);
-            await createGithubRepo(decryptedToken, repoName);
-            console.log(`Successfully created repository: ${owner}/${repoName}`);
-            repoWasCreated = true;
-        } else {
-            console.log(`Repository ${owner}/${repoName} already exists.`);
-        }
-
-        // 4. Update Supabase Profile with Repo Name
-        const { error: updateError } = await supabase
-            .from('users')
-            .update({ github_repo_name: repoName })
-            .eq('id', user.id);
-
-        if (updateError) {
-            console.error(`Failed to update Supabase profile for user ${user.id} with repo name ${repoName}:`, updateError);
-            // If we created the repo but failed to save to DB, this is problematic. 
-            // Manual intervention might be needed, or add retry logic.
-            return { success: false, error: `Failed to update profile after ensuring repo: ${updateError.message}` };
-        }
-
-        console.log(`Successfully ensured repo ${repoName} for user ${user.id} and updated profile.`);
-        return { success: true, repoName: repoName, created: repoWasCreated };
-
-    } catch (error: any) {
-        console.error(`Error ensuring GitHub repository for user ${user.id}:`, error);
-        return { success: false, error: error.message || 'An unexpected error occurred while ensuring the GitHub repository.' };
-    }
-}
-
 // Added getNoteTree server action
 export async function getNoteTree(): Promise<GetTreeResult> {
     const cookieStore = await cookies();
@@ -491,42 +404,51 @@ export async function getNoteTree(): Promise<GetTreeResult> {
 
     const { data: profile, error: profileError } = await supabase
         .from('users')
-        .select('github_repo_name, github_token_encrypted')
+        .select('github_repo_name, github_token_encrypted') // Select token too
         .eq('id', user.id)
         .single();
 
-    if (profileError || !profile) { return { success: false, error: 'Could not fetch user profile.' }; }
-    if (!profile.github_repo_name) { return { success: false, error: 'GitHub repository name not set.' }; }
-    if (!profile.github_token_encrypted) { return { success: false, error: 'Encrypted GitHub token not found.' }; }
+    if (profileError) { 
+        return { success: false, error: 'Could not fetch user profile.' };
+    }
 
-    // 2. Decrypt Token
+    // 2. Ensure Repo Exists using the CORRECT imported function
+    const repoResult = await ensureUserRepo(); 
+    if (!repoResult.success || !repoResult.repoName) {
+        return { success: false, error: repoResult.error || 'Failed to ensure user repository before fetching tree.' };
+    }
+    const repoName = repoResult.repoName;
+
+    // 3. Decrypt Token (Profile should be fetched by ensureUserRepo, but let's keep token fetch here for now)
+     if (!profile?.github_token_encrypted) {
+        return { success: false, error: 'Encrypted GitHub token not found in profile.' };
+    }
     const decryptedToken = decrypt(profile.github_token_encrypted);
-    if (!decryptedToken) { return { success: false, error: 'Failed to decrypt GitHub token.' }; }
+    if (!decryptedToken) {
+        return { success: false, error: 'Failed to decrypt GitHub token.' };
+    }
 
     try {
-        // 3. Get GitHub Username & Repo
+        // 4. Get GitHub Username
         const githubUser = await getGithubUser(decryptedToken);
         const owner = githubUser.login;
-        const repo = profile.github_repo_name;
 
-        // 4. Call GitHub Service to Get Tree (Recursive)
+        // 5. Call GitHub Service to get tree
         // The getRepoTree function needs full implementation
         const treeData = await getRepoTree(
             decryptedToken,
             owner,
-            repo,
-            'main' // Assumes default branch is main
+            repoName, // Use the confirmed repo name
+            // Optionally pass branch name/SHA if needed, default is likely main/master
         );
 
-        console.log(`Successfully fetched tree for ${owner}/${repo}`);
+        // TODO: Process treeData into the format expected by the frontend
+        console.log(`Fetched tree data for ${owner}/${repoName}`);
         return { success: true, tree: treeData };
 
     } catch (error: any) {
-        console.error(`Error fetching repository tree for ${profile.github_repo_name}:`, error);
-        if (error.status === 404 || error.message?.includes('Not Found') || error.message?.includes('404')) {
-             return { success: false, error: 'Repository or default branch not found. Has the first note been saved?' };
-        }
-        return { success: false, error: error.message || 'Failed to fetch repository tree.' };
+        console.error(`Error getting note tree from GitHub for user ${user.id}:`, error);
+        return { success: false, error: error.message || 'Failed to get note tree from GitHub.' };
     }
 }
 

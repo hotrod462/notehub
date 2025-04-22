@@ -61,7 +61,7 @@ export async function createGithubRepo(token: string, repoName: string): Promise
     const { data: repo } = await octokit.rest.repos.createForAuthenticatedUser({
       name: repoName,
       private: true, // Ensure the repo is private
-      description: "Repository for NoteHub notes",
+      description: "Repository for Drafter notes",
       auto_init: true, // Initialize with a README to avoid empty repo issues
     });
     console.log(`Created GitHub repo: ${repo.full_name}`);

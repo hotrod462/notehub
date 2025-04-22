@@ -2,7 +2,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { encrypt } from '@/lib/encryption.server'; // Import the encrypt function
-import { ensureUserRepo } from '@/app/actions/noteActions'; // Import the ensureUserRepo server action
+import { ensureUserRepo } from '@/app/actions/repoActions'; // Corrected import path
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
             console.log(`Calling ensureUserRepo for user ${user.id}...`);
             const repoResult = await ensureUserRepo();
             if (repoResult.success) {
-                console.log(`ensureUserRepo successful for user ${user.id}. Repo: ${repoResult.repoName}, Created: ${repoResult.created}`);
+                console.log(`ensureUserRepo successful for user ${user.id}. Repo: ${repoResult.repoName}`);
             } else {
                 console.error(`ensureUserRepo failed for user ${user.id}: ${repoResult.error}`);
                 // Non-critical error for login flow, log and continue.

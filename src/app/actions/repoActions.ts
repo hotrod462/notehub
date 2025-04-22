@@ -8,9 +8,10 @@ import {
   checkRepoExists,
   createGithubRepo,
 } from '@/lib/githubService.server';
+import { revalidatePath } from 'next/cache';
 
 // Define a standard repo name (can be made configurable later)
-const NOTEHUB_REPO_NAME = 'notehub-notes';
+const DRAFTER_REPO_NAME = 'drafter-repo';
 
 // Helper function to perform the repo check and creation logic
 async function checkAndCreateRepoIfNeeded(
@@ -18,21 +19,23 @@ async function checkAndCreateRepoIfNeeded(
   owner: string
 ): Promise<{ repoExisted: boolean; repoName: string; error?: string }> {
   try {
-    const repoExists = await checkRepoExists(token, owner, NOTEHUB_REPO_NAME);
-    let repoFullName = `${owner}/${NOTEHUB_REPO_NAME}`;
+    const repoExists = await checkRepoExists(token, owner, DRAFTER_REPO_NAME);
+    let repoFullName = `${owner}/${DRAFTER_REPO_NAME}`;
 
     if (!repoExists) {
-      console.log(`Repo ${repoFullName} does not exist on GitHub. Creating...`);
-      const createdRepo = await createGithubRepo(token, NOTEHUB_REPO_NAME);
-      repoFullName = createdRepo.full_name; // Use the name from the response
-      console.log(`Successfully created repo: ${repoFullName}`);
-      return { repoExisted: false, repoName: NOTEHUB_REPO_NAME };
+      console.log(`Repository ${repoFullName} not found. Creating...`);
+      const createdRepo = await createGithubRepo(token, DRAFTER_REPO_NAME);
+      repoFullName = createdRepo.full_name;
+      console.log(`Repository ${repoFullName} created successfully.`);
+      revalidatePath('/notes');
+      return { repoExisted: false, repoName: DRAFTER_REPO_NAME };
     } else {
-      console.log(`Repo ${repoFullName} already exists on GitHub.`);
-      return { repoExisted: true, repoName: NOTEHUB_REPO_NAME };
+      console.log(`Repository ${repoFullName} already exists.`);
+      revalidatePath('/notes');
+      return { repoExisted: true, repoName: DRAFTER_REPO_NAME };
     }
   } catch (error: any) {
-    console.error('Error during GitHub repo check/creation:', error);
+    console.error('Error ensuring repository:', error);
     return { repoExisted: false, repoName: '', error: error.message || 'Failed to ensure GitHub repository.' };
   }
 }

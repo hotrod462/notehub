@@ -12,6 +12,9 @@ export default function SignInPage() {
           Login with GitHub
         </Button>
       </form>
+      <p className="text-xs text-muted-foreground mt-6 max-w-xs text-center">
+        Drafter requests repository permissions solely to create and manage the 'drafter-repo' for your notes. Drafter does not access other repositories.
+      </p>
     </div>
   );
 } 

@@ -9,7 +9,11 @@ import { signInWithGithub, signOut } from "@/app/auth/actions";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "next-themes";
 import { ThemeToggle } from "@/components/ThemeToggle";
+// import { Link } from "react-router-dom";
+// import { Package2 } from "lucide-react";
 // import { FileTreeSidebar } from "@/components/FileTreeSidebar";
+import { cn } from "@/lib/utils";
+// import { SessionProvider } from "next-auth/react"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -22,8 +26,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NoteHub",
-  description: "Your notes, versioned with GitHub.",
+  title: "Drafter",
+  description: "Create and manage drafts backed by GitHub, in plain markdown",
 };
 
 async function AppHeader() {
@@ -63,10 +67,9 @@ async function AppHeader() {
         <div className="mr-4 hidden md:flex">
           <a href="/" className="mr-6 flex items-center space-x-2">
             <span className="hidden font-bold sm:inline-block">
-              NoteHub
+              Drafter
             </span>
           </a>
-          {/* TODO: Add navigation like file tree maybe? */}
         </div>
         <div className="flex flex-1 items-center justify-end space-x-2">
           <ThemeToggle />
