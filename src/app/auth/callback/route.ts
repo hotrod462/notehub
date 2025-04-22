@@ -145,7 +145,8 @@ export async function GET(request: NextRequest) {
   // Ensure PostHog client is shut down cleanly before redirecting
   // await posthog.shutdownAsync(); // Remove incorrect call
   // No explicit shutdown needed here with flushAt: 1 in client config
-  return NextResponse.redirect(requestUrl.origin);
+  // Redirect to the notes page instead of the origin
+  return NextResponse.redirect(`${requestUrl.origin}/notes`);
 }
 
 // Remove commented out shutdown handlers
