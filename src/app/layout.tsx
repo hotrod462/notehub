@@ -10,7 +10,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "next-themes";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import Link from 'next/link';
-import { PostHogProvider } from "../components/PostHogProvider";
+import { PostHogProvider } from "@/components/PostHogProvider";
 // import { Link } from "react-router-dom";
 // import { Package2 } from "lucide-react";
 // import { FileTreeSidebar } from "@/components/FileTreeSidebar";
